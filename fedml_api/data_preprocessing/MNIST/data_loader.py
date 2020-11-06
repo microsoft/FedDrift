@@ -1,9 +1,12 @@
 import json
 import os
+import sys
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
 from fedml_api.model.linear.lr import LogisticRegression
 
