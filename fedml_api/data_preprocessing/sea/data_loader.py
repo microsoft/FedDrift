@@ -21,7 +21,7 @@ def batch_data(data, batch_size):
 
     # convert to numpy arrays
     data_x = data[['f1', 'f2', 'f3']].values.astype(np.float64)
-    data_y = data[['label']].values.astype(np.int32)
+    data_y = data[['label']].values.astype(np.int32).flatten()
 
     # loop through mini-batches
     batch_data = list()
@@ -41,6 +41,8 @@ def load_partition_data_sea(batch_size, train_iteration, num_client,
     # We always use 500 samples per client in each training iteration
     # TODO: change to variable sample sizes
     # TODO: generate more clients than requested for client sampling
+    # TODO: Make the data generation consistent (fix random seed) so
+    #       that it works in a distributed setting
     sample_per_client_iter = 500
     
     # For now we only use the first two concepts
@@ -48,7 +50,7 @@ def load_partition_data_sea(batch_size, train_iteration, num_client,
     df_con2 = pd.read_csv(data_path + 'concept2.csv')
 
     # Randomly generate change point for each client
-    if drift_together:
+    if drift_together == 1:
         cp = np.random.random_sample() * train_iteration
         change_point = [cp for c in range(num_client)]
     else:
@@ -136,6 +138,7 @@ def main():
     print(test_data_num)    
     print(train_data_local_num_dict)
     print(class_num)
+    print(test_data_global[0])
     
     
 
