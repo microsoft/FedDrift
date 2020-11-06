@@ -13,6 +13,8 @@ LR=$10
 DATASET=$11
 DATA_DIR=$12
 CI=$13
+TRAIN_ITER=$14
+DRIFT_TOGETHER=$15
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -32,4 +34,6 @@ mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg.py \
   --epochs $EPOCH \
   --batch_size $BATCH_SIZE \
   --lr $LR \
-  --ci $CI
+  --ci $CI \
+  --train_iteration $TRAIN_ITER \
+  --drift_together $DRIFT_TOGETHER

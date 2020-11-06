@@ -79,6 +79,13 @@ def add_args(parser):
 
     parser.add_argument('--ci', type=int, default=0,
                         help='CI')
+
+    parser.add_argument('--train_iteration', type=int, default=3,
+                        help='The number of FedML iterations (over time)')
+
+    parser.add_argument('--drift_together', type=int, default=0,
+                        help='If the concept drift happens at the same time across all clients')
+    
     args = parser.parse_args()
     return args
 
@@ -88,13 +95,9 @@ def load_data(args, dataset_name):
         logging.info("load_data. dataset_name = %s" % dataset_name)
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_mnist(args.batch_size)
+        class_num = load_partition_data_sea(args.batch_size, args.train_iteration,
+                                            args.client_num_in_total, args.drift_together)
         feature_num = 3
-        """
-        For shallow NN or linear models, 
-        we uniformly sample a fraction of clients each round (as the original FedAvg paper)
-        """
-        args.client_num_in_total = client_num
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
@@ -130,6 +133,8 @@ def init_training_device(process_ID, fl_worker_num, gpu_num_per_machine):
 if __name__ == "__main__":
     # initialize distributed computing (MPI)
     comm, process_id, worker_number = FedML_init()
+
+    logging.basicConfig(filename='output.log', level=logging.INFO)
 
     # parse python script input parameters
     parser = argparse.ArgumentParser()
@@ -186,12 +191,15 @@ if __name__ == "__main__":
      train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
      class_num, feature_num] = dataset
 
-    # create model.
-    # Note if the model is DNN (e.g., ResNet), the training will be very slow.
-    model = create_model(args, model_name=args.model, output_dim=class_num,
-                         feature_dim = feature_num)
+    for it in range(args.train_iteration):
+        # create model.
+        # Note if the model is DNN (e.g., ResNet), the training will be very slow.
+        model = create_model(args, model_name=args.model, output_dim=class_num,
+                             feature_dim = feature_num)
 
-    # start "federated averaging (FedAvg)"
-    FedML_FedAvg_distributed(process_id, worker_number, device, comm,
-                             model, train_data_num, train_data_global, test_data_global,
-                             train_data_local_num_dict, train_data_local_dict, test_data_local_dict, args)
+        # start "federated averaging (FedAvg)" for this round
+        FedML_FedAvg_distributed(process_id, worker_number, device, comm,
+                                 model, train_data_num[it], train_data_global[it],
+                                 test_data_global[it], train_data_local_num_dict[it],
+                                 train_data_local_dict[it], test_data_local_dict[it],
+                                 args)
