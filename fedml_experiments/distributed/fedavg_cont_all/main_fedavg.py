@@ -36,12 +36,6 @@ def add_args(parser):
     parser.add_argument('--data_dir', type=str, default='./../../../data/cifar10',
                         help='data directory')
 
-    parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
-                        help='how to partition the dataset on local workers')
-
-    parser.add_argument('--partition_alpha', type=float, default=0.5, metavar='PA',
-                        help='partition alpha (default: 0.5)')
-
     parser.add_argument('--client_num_in_total', type=int, default=1000, metavar='NN',
                         help='number of workers in a distributed cluster')
 
@@ -80,12 +74,12 @@ def add_args(parser):
     parser.add_argument('--ci', type=int, default=0,
                         help='CI')
 
-    parser.add_argument('--train_iteration', type=int, default=3,
-                        help='The number of FedML iterations (over time)')
+    parser.add_argument('--curr_train_iteration', type=int, default=0,
+                        help='The current Fededrated Learning iterations (over time)')
 
     parser.add_argument('--drift_together', type=int, default=0,
                         help='If the concept drift happens at the same time across all clients')
-    
+
     args = parser.parse_args()
     return args
 
@@ -95,8 +89,8 @@ def load_data(args, dataset_name):
         logging.info("load_data. dataset_name = %s" % dataset_name)
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
-        class_num = load_partition_data_sea(args.batch_size, args.train_iteration,
-                                            args.client_num_in_total, args.drift_together)
+        class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
+                                            args.client_num_in_total)
         feature_num = 3
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
@@ -140,6 +134,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     args = add_args(parser)
     logging.info(args)
+#    args.curr_train_iteration -= 1
 
     # customize the process name
     str_process_name = "FedAvg (distributed):" + str(process_id)
@@ -159,11 +154,12 @@ if __name__ == "__main__":
     # initialize the wandb machine learning experimental tracking platform (https://www.wandb.com/).
     if process_id == 0:
         wandb.init(
-            # project="federated_nas",
             project="fedml",
-            name="FedAVG(d)-" + args.dataset + "-" + 
-                str(args.partition_method) + "r" + str(args.comm_round) + "-e" +
-                str(args.epochs) + "-lr" + str(args.lr),
+            name="FedAvgCont(d)-" + args.dataset +
+                "-r" + str(args.comm_round) + "-e" +
+                str(args.epochs) + "-lr" + str(args.lr) +
+                "-iter" + str(args.curr_train_iteration) +
+                "-dt" + str(args.drift_together),
             config=args
         )
 
@@ -191,15 +187,14 @@ if __name__ == "__main__":
      train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
      class_num, feature_num] = dataset
 
-    for it in range(args.train_iteration):
-        # create model.
-        # Note if the model is DNN (e.g., ResNet), the training will be very slow.
-        model = create_model(args, model_name=args.model, output_dim=class_num,
-                             feature_dim = feature_num)
+    # create model.
+    # Note if the model is DNN (e.g., ResNet), the training will be very slow.
+    model = create_model(args, model_name=args.model, output_dim=class_num,
+                         feature_dim = feature_num)
 
-        # start "federated averaging (FedAvg)" for this round
-        FedML_FedAvg_distributed(process_id, worker_number, device, comm,
-                                 model, train_data_num[it], train_data_global[it],
-                                 test_data_global[it], train_data_local_num_dict[it],
-                                 train_data_local_dict[it], test_data_local_dict[it],
-                                 args)
+    # start "federated averaging (FedAvg)" for this round
+    FedML_FedAvg_distributed(process_id, worker_number, device, comm,
+                             model, train_data_num, train_data_global,
+                             test_data_global, train_data_local_num_dict,
+                             train_data_local_dict, test_data_local_dict,
+                             args)

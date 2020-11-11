@@ -32,19 +32,16 @@ def batch_data(data, batch_size):
         batched_y = torch.from_numpy(np.asarray(batched_y)).long()
         batch_data.append((batched_x, batched_y))
     return batch_data
-    
 
-def load_partition_data_sea(batch_size, train_iteration, num_client,
-                            drift_together):
+def generate_data_sea(train_iteration, num_client, drift_together):
+
     data_path = "./../../../data/sea/"
 
     # We always use 500 samples per client in each training iteration
     # TODO: change to variable sample sizes
     # TODO: generate more clients than requested for client sampling
-    # TODO: Make the data generation consistent (fix random seed) so
-    #       that it works in a distributed setting
     sample_per_client_iter = 500
-    
+
     # For now we only use the first two concepts
     df_con1 = pd.read_csv(data_path + 'concept1.csv')
     df_con2 = pd.read_csv(data_path + 'concept2.csv')
@@ -56,7 +53,7 @@ def load_partition_data_sea(batch_size, train_iteration, num_client,
     else:
         change_point = [np.random.random_sample() * train_iteration
                         for c in range(num_client)]
-
+        
     # Generate data for each client/iteration
     train_data = [[] for t in range(train_iteration + 1)]
     for it in range(train_iteration + 1):
@@ -74,8 +71,7 @@ def load_partition_data_sea(batch_size, train_iteration, num_client,
                                  sample_per_client_iter)
                 train_df = train_df.append(df_con2.sample(n=num_sample),
                                            ignore_index=True)
-            train_data[it].append(train_df)
-            # For debugging purposes, save the data as files
+            # Save the data as files
             train_df.to_csv(data_path +
                             'client_{}_iter_{}.csv'.format(c, it),
                             index = False)
@@ -84,40 +80,56 @@ def load_partition_data_sea(batch_size, train_iteration, num_client,
     with open(data_path + 'change_points', 'w') as cpf:
         for c in range(num_client):
             cpf.write('{}\n'.format(change_point[c]))
+    
 
-    # Prepare data into multiple training iterations
-    train_data_num = [0 for t in range(train_iteration)]
-    test_data_num = [0 for t in range(train_iteration)]
-    train_data_local_dict = [dict() for t in range(train_iteration)]
-    test_data_local_dict = [dict() for t in range(train_iteration)]
-    train_data_local_num_dict = [dict() for t in range(train_iteration)]
-    train_data_global = [list() for t in range(train_iteration)]
-    test_data_global = [list() for t in range(train_iteration)]
+def load_partition_data_sea(batch_size, current_train_iteration,
+                            num_client):
+    data_path = "./../../../data/sea/"
 
-    for t in range(train_iteration):
+    # Load the data from generated CSVs
+    train_data = [pd.DataFrame() for c in range(num_client)]
+    test_data = []
+    
+    # We use all the data until the current iteration as training data
+    # TODO: change it to an option for other methods
+    for it in range(current_train_iteration + 1):
         for c in range(num_client):
-            # We use all the data before the current iteration
-            # as training data
-            # TODO: change it to an option for other methods
-            train_df = pd.DataFrame(columns = list(train_data[0][c].columns))
-            for it in range(t+1):
-                train_df = train_df.append(train_data[it][c],
-                                           ignore_index=True)
-            train_data_num[t] += len(train_df.index)
-            # test data is from the next training iteration
-            test_data_num[t] += len(train_data[t+1][c].index)
-            train_data_local_num_dict[t][c] = len(train_df.index)
-
-            # transform to batches
-            train_batch = batch_data(train_df, batch_size)
-            test_batch = batch_data(train_data[t+1][c], batch_size)
-
-            # put batched data into the arrays
-            train_data_local_dict[t][c] = train_batch
-            test_data_local_dict[t][c] = test_batch
+            train_df = pd.read_csv(data_path +
+                                   'client_{}_iter_{}.csv'.format(c, it))
+            train_data[c] = train_data[c].append(train_df,
+                                                 ignore_index=True)
             
-            train_data_global[t] += train_batch
-            test_data_global[t] += test_batch
+    # Use the data in the next training iteration as the test data
+    for c in range(num_client):
+        test_df = pd.read_csv(data_path +
+                              'client_{}_iter_{}.csv'.format(
+                                  c, current_train_iteration + 1))
+        test_data.append(test_df)                    
+    
+    # Prepare data into multiple training iterations
+    train_data_num = 0
+    test_data_num = 0
+    train_data_local_dict = dict()
+    test_data_local_dict = dict()
+    train_data_local_num_dict = dict()
+    train_data_global = list()
+    test_data_global = list()
+
+    for c in range(num_client):
+        train_data_num += len(train_data[c].index)
+        test_data_num += len(test_data[c].index)
+        train_data_local_num_dict[c] = len(train_data[c].index)
+
+        # transform to batches
+        train_batch = batch_data(train_data[c], batch_size)
+        test_batch = batch_data(test_data[c], batch_size)
+
+        # put batched data into the arrays
+        train_data_local_dict[c] = train_batch
+        test_data_local_dict[c] = test_batch
+
+        train_data_global += train_batch
+        test_data_global += test_batch
     
     client_num = num_client
     class_num = 2
@@ -128,10 +140,16 @@ def load_partition_data_sea(batch_size, train_iteration, num_client,
 
 
 def main():
+
+    np.random.seed(0)
+    torch.manual_seed(10)
+
+    generate_data_sea(5, 10, 0)
+    
     client_num, train_data_num, test_data_num, train_data_global, \
     test_data_global, train_data_local_num_dict, train_data_local_dict, \
     test_data_local_dict, class_num = \
-    load_partition_data_sea(10, 5, 10, False)
+    load_partition_data_sea(10, 3, 10)
 
     print(client_num)
     print(train_data_num)
