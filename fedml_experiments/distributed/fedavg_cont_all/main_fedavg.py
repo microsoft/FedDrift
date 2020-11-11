@@ -80,6 +80,9 @@ def add_args(parser):
     parser.add_argument('--drift_together', type=int, default=0,
                         help='If the concept drift happens at the same time across all clients')
 
+    parser.add_argument('--report_client', type=int, default=0,
+                        help='Whether reporting the accuracy of each client')
+
     args = parser.parse_args()
     return args
 

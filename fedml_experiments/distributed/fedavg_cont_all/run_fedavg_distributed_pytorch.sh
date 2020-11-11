@@ -40,7 +40,7 @@ python3 ./prepare_data.py \
 # most of the existing codes.
 
 TI=${TRAIN_ITER}
-for (( it=0; it < TI; i++ ));
+for (( it=0; it < TI; it++ ));
 do
     mpirun -np $PROCESS_NUM -hostfile ./mpi_host_file python3 ./main_fedavg.py \
            --gpu_server_num $SERVER_NUM \
@@ -56,6 +56,7 @@ do
            --lr $LR \
            --ci $CI \
            --curr_train_iteration $it \
-           --drift_together $DRIFT_TOGETHER;
+           --drift_together $DRIFT_TOGETHER \
+           --report_client 1
 done
 
