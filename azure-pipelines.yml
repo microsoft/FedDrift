@@ -25,8 +25,28 @@ steps:
     alertWarningLevel: 'High'
 - task: CredScan@2
   inputs:
-    toolMajorVersion: 'V1'
+    toolMajorVersion: 'V2'
+- task: SdtReport@1
+  inputs:
+    AllTools: true
+    BinSkimBreakOn: 'Error'
+    CodesignValidationBreakOn: 'Error'
+    FxCopBreakOn: 'ErrorAbove'
+    ModernCopBreakOn: 'Error'
+    PoliCheckBreakOn: 'Severity1'
+    RoslynAnalyzersBreakOn: 'Error'
+    SemmleBreakOn: 'Error'
+    TSLintBreakOn: 'Error'
+    ToolLogsNotFoundAction: 'Standard'
+- task: PublishSecurityAnalysisLogs@2
+  inputs:
+    ArtifactName: 'CodeAnalysisLogs'
+    ArtifactType: 'Container'
+    AllTools: true
+    ToolLogsNotFoundAction: 'Standard'
 - task: uploadScanResults@1
   inputs:
     areaPathParent: 'kevinhsieh.ContFedML'
     uploadUrl: 'https://airbuildscan.azurewebsites.net/api/Upload'
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
