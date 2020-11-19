@@ -7,7 +7,7 @@ trigger:
 - master
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'windows-latest'
 
 steps:
 - script: echo Hello, world!
@@ -26,3 +26,7 @@ steps:
 - task: CredScan@2
   inputs:
     toolMajorVersion: 'V1'
+- task: uploadScanResults@1
+  inputs:
+    areaPathParent: 'kevinhsieh.ContFedML'
+    uploadUrl: 'https://airbuildscan.azurewebsites.net/api/Upload'
