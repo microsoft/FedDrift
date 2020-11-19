@@ -28,8 +28,8 @@ public class Config {
     //public static String BASE_URL_IOT_MQ_SERVICE = "tcp://193.112.12.67:1883";//C
     //public final static String BASE_URL_IOT_MQ_SERVICE = "tcp://118.89.61.144:1883";//TEST
 
-    public static String MQ_USER = "admin";
-    public static String MQ_PASSWORD = "admin";
+    public static String MQ_USER = "";
+    public static String MQ_PASSWORD = "";
 
     //FOUR hours, data size = (109 * 3600 * 4 / 1024) = 1532 Kb
     public static final int MAX_LOCATION_CACHE_NUMBER = 3600 * 4;
