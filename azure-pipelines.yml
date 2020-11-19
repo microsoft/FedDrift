@@ -26,10 +26,19 @@ steps:
 - task: CredScan@2
   inputs:
     toolMajorVersion: 'V2'
-- task: SdtReport@2
+    outputFormat: sarif
+- task: SdtReport@1
   inputs:
-    GdnExportSarifFile: true
-    GdnExportAllTools: true
+    AllTools: true
+    BinSkimBreakOn: 'Error'
+    CodesignValidationBreakOn: 'Error'
+    FxCopBreakOn: 'ErrorAbove'
+    ModernCopBreakOn: 'Error'
+    PoliCheckBreakOn: 'Severity1'
+    RoslynAnalyzersBreakOn: 'Error'
+    SemmleBreakOn: 'Error'
+    TSLintBreakOn: 'Error'
+    ToolLogsNotFoundAction: 'Standard'
 - task: PublishSecurityAnalysisLogs@2
   inputs:
     ArtifactName: 'CodeAnalysisLogs'
