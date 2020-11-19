@@ -26,7 +26,6 @@ steps:
 - task: CredScan@2
   inputs:
     toolMajorVersion: 'V2'
-    outputFormat: sarif
 - task: SdtReport@2
   inputs:
     GdnExportSarifFile: true
