@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
 from fedml_api.data_preprocessing.sea.data_loader import generate_data_sea
 
+from fedml_api.data_preprocessing.sine.data_loader import generate_data_sine
+
 def add_args(parser):
     """
     parser : argparse.ArgumentParser
@@ -45,9 +47,15 @@ def add_args(parser):
 
 
 def prepare_data(args, dataset_name):
+    logging.info("generate_data. dataset_name = %s" % dataset_name)
     if dataset_name == "sea":
+        generate_data_sea(args.train_iteration, args.client_num_in_total,
+                          args.drift_together)
+
+    elif dataset_name == "sine":
         logging.info("generate_data. dataset_name = %s" % dataset_name)
-        generate_data_sea(args.train_iteration, args.client_num_in_total, args.drift_together)
+        generate_data_sine(args.train_iteration, args.client_num_in_total,
+                           args.drift_together)
         
     return
 
