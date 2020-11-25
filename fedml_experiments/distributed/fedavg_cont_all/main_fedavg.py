@@ -16,6 +16,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
 from fedml_api.data_preprocessing.sea.data_loader import load_partition_data_sea
 
+from fedml_api.data_preprocessing.sine.data_loader import load_partition_data_sine
+
 from fedml_api.model.linear.lr import LogisticRegression
 
 from fedml_api.distributed.fedavg.FedAvgAPI import FedML_init, FedML_FedAvg_distributed
@@ -88,13 +90,21 @@ def add_args(parser):
 
 
 def load_data(args, dataset_name):
-    if dataset_name == "sea":
-        logging.info("load_data. dataset_name = %s" % dataset_name)
+    logging.info("load_data. dataset_name = %s" % dataset_name)
+    
+    if dataset_name == "sea":        
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
                                             args.client_num_in_total)
         feature_num = 3
+
+    elif dataset_name == "sine":
+        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        class_num = load_partition_data_sine(args.batch_size, args.curr_train_iteration,
+                                             args.client_num_in_total)
+        feature_num = 2
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
