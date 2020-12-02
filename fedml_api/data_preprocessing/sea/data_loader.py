@@ -83,21 +83,30 @@ def generate_data_sea(train_iteration, num_client, drift_together):
     
 
 def load_partition_data_sea(batch_size, current_train_iteration,
-                            num_client):
+                            num_client, retrain_data):
     data_path = "./../../../data/sea/"
 
     # Load the data from generated CSVs
     train_data = [pd.DataFrame() for c in range(num_client)]
     test_data = []
     
-    # We use all the data until the current iteration as training data
-    # TODO: change it to an option for other methods
-    for it in range(current_train_iteration + 1):
-        for c in range(num_client):
-            train_df = pd.read_csv(data_path +
-                                   'client_{}_iter_{}.csv'.format(c, it))
-            train_data[c] = train_data[c].append(train_df,
-                                                 ignore_index=True)
+    if retrain_data == "all":
+        # Use all the data until the current iteration as training data
+        for it in range(current_train_iteration + 1):
+            for c in range(num_client):
+                train_df = pd.read_csv(data_path +
+                                       'client_{}_iter_{}.csv'.format(c, it))
+                train_data[c] = train_data[c].append(train_df,
+                                                     ignore_index=True)
+    elif retrain_data.startswith("win"):
+        win_size = int(retrain_data.replace("win", ""))
+        start_iter = max(0, current_train_iteration - win_size + 1)
+        for it in range(start_iter, current_train_iteration + 1):
+            for c in range(num_client):
+                train_df = pd.read_csv(data_path +
+                                       'client_{}_iter_{}.csv'.format(c, it))
+                train_data[c] = train_data[c].append(train_df,
+                                                     ignore_index=True)
             
     # Use the data in the next training iteration as the test data
     for c in range(num_client):
