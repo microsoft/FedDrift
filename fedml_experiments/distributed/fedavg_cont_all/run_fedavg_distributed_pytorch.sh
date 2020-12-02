@@ -15,6 +15,7 @@ DATA_DIR=${12}
 CI=${13}
 TRAIN_ITER=${14}
 DRIFT_TOGETHER=${15}
+RETRAIN_DATA=${16}
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -57,6 +58,7 @@ do
            --ci $CI \
            --curr_train_iteration $it \
            --drift_together $DRIFT_TOGETHER \
-           --report_client 1
+           --report_client 1 \
+	   --retrain_data $RETRAIN_DATA
 done
 

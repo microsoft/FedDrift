@@ -85,6 +85,9 @@ def add_args(parser):
     parser.add_argument('--report_client', type=int, default=0,
                         help='Whether reporting the accuracy of each client')
 
+    parser.add_argument('--retrain_data', type=str, default='all',
+                        help='which data to be included for retraining')
+
     args = parser.parse_args()
     return args
 
@@ -96,14 +99,14 @@ def load_data(args, dataset_name):
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
-                                            args.client_num_in_total)
+                                            args.client_num_in_total, args.retrain_data)
         feature_num = 3
 
     elif dataset_name == "sine":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sine(args.batch_size, args.curr_train_iteration,
-                                             args.client_num_in_total)
+                                             args.client_num_in_total, args.retrain_data)
         feature_num = 2
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
@@ -172,7 +175,8 @@ if __name__ == "__main__":
                 "-r" + str(args.comm_round) + "-e" +
                 str(args.epochs) + "-lr" + str(args.lr) +
                 "-iter" + str(args.curr_train_iteration) +
-                "-dt" + str(args.drift_together),
+                "-dt" + str(args.drift_together) +
+                "-" + args.retrain_data,
             config=args
         )
 
