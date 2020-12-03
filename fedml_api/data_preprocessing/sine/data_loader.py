@@ -10,6 +10,7 @@ import math
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
+from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data
 
 def batch_data(data, batch_size):
     '''
@@ -104,35 +105,11 @@ def load_partition_data_sine(batch_size, current_train_iteration,
     data_path = "./../../../data/sine/"
 
     # Load the data from generated CSVs
-    train_data = [pd.DataFrame() for c in range(num_client)]
-    test_data = []
-
-    if retrain_data == "all":
-        # Use all the data until the current iteration as training data
-        for it in range(current_train_iteration + 1):
-            for c in range(num_client):
-                train_df = pd.read_csv(data_path +
-                                       'client_{}_iter_{}.csv'.format(c, it))
-                train_data[c] = train_data[c].append(train_df,
-                                                     ignore_index=True)
-    elif retrain_data.startswith("win"):
-        win_size = int(retrain_data.replace("win", ""))
-        start_iter = max(0, current_train_iteration - win_size + 1)
-        for it in range(start_iter, current_train_iteration + 1):
-            for c in range(num_client):
-                train_df = pd.read_csv(data_path +
-                                       'client_{}_iter_{}.csv'.format(c, it))
-                train_data[c] = train_data[c].append(train_df,
-                                                     ignore_index=True)
-            
-    # Use the data in the next training iteration as the test data
-    for c in range(num_client):
-        test_df = pd.read_csv(data_path +
-                              'client_{}_iter_{}.csv'.format(
-                                  c, current_train_iteration + 1))
-        test_data.append(test_df)                    
+    train_data, test_data = load_retrain_table_data(
+        data_path, num_client, current_train_iteration,
+        'client_{}_iter_{}.csv', retrain_data)
     
-    # Prepare data into multiple training iterations
+    # Prepare data for FedML
     train_data_num = 0
     test_data_num = 0
     train_data_local_dict = dict()
