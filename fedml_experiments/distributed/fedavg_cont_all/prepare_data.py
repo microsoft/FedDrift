@@ -12,6 +12,8 @@ from fedml_api.data_preprocessing.sea.data_loader import generate_data_sea
 
 from fedml_api.data_preprocessing.sine.data_loader import generate_data_sine
 
+from fedml_api.data_preprocessing.circle.data_loader import generate_data_circle
+
 def add_args(parser):
     """
     parser : argparse.ArgumentParser
@@ -56,6 +58,11 @@ def prepare_data(args, dataset_name):
         logging.info("generate_data. dataset_name = %s" % dataset_name)
         generate_data_sine(args.train_iteration, args.client_num_in_total,
                            args.drift_together)
+
+    elif dataset_name == "circle":
+        logging.info("generate_data. dataset_name = %s" % dataset_name)
+        generate_data_circle(args.train_iteration, args.client_num_in_total,
+                             args.drift_together)
         
     return
 
