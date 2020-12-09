@@ -22,6 +22,8 @@ from fedml_api.data_preprocessing.circle.data_loader import load_partition_data_
 
 from fedml_api.model.linear.lr import LogisticRegression
 
+from fedml_api.model.fnn.fnn import FeedForwardNN
+
 from fedml_api.distributed.fedavg.FedAvgAPI import FedML_init, FedML_FedAvg_distributed
 
 
@@ -130,6 +132,9 @@ def create_model(args, model_name, output_dim, feature_dim):
     if model_name == "lr":
         logging.info("LogisticRegression, feature_dim = %s" % feature_dim)
         model = LogisticRegression(feature_dim, output_dim)
+    if model_name == "fnn":
+        logging.info("FeedForwardNN, feature_dim = %s" % feature_dim)
+        model = FeedForwardNN(feature_dim, output_dim, feature_dim * 2)
     return model
 
 
