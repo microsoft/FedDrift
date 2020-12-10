@@ -33,7 +33,7 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
         # with a much larger dataset
         weight_method = retrain_method.replace("weight-", "")
         for it in range(current_train_iteration + 1):
-            weight = (it+1) if weight_method == "linear" else 2^(it)
+            weight = (it+1) if weight_method == "linear" else 2**(it)
             for c in range(num_client):
                 train_df = pd.read_csv(data_path +
                                        csv_file_name.format(c, it))
