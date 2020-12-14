@@ -56,9 +56,10 @@ do
            --batch_size $BATCH_SIZE \
            --lr $LR \
            --ci $CI \
+           --total_train_iteration $TI \
            --curr_train_iteration $it \
            --drift_together $DRIFT_TOGETHER \
            --report_client 1 \
-	   --retrain_data $RETRAIN_DATA
+           --retrain_data $RETRAIN_DATA
 done
 
