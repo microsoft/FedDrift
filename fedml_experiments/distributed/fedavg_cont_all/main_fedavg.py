@@ -80,6 +80,9 @@ def add_args(parser):
     parser.add_argument('--ci', type=int, default=0,
                         help='CI')
 
+    parser.add_argument('--total_train_iteration', type=int, default=3,
+                        help='The number of FedML iterations (over time)')
+
     parser.add_argument('--curr_train_iteration', type=int, default=0,
                         help='The current Fededrated Learning iterations (over time)')
 
