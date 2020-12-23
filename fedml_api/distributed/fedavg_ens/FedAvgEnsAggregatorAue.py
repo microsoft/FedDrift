@@ -10,9 +10,12 @@ from torch import nn
 from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
 
 
-class FedAvgEnsAggregator(object):
+class FedAvgEnsAggregatorAue(object):
+    EPS = 1e-20
+    K = 5
     def __init__(self, train_global, test_global, all_train_data_num,
-                 train_data_local_dict, test_data_local_dict, train_data_local_num_dict, worker_num, device, model, args):
+                 train_data_local_dict, test_data_local_dict, train_data_local_num_dict,
+                 worker_num, device, model, prev_models, class_num, args):
         self.train_global = train_global
         self.test_global = test_global
         self.all_train_data_num = all_train_data_num
@@ -23,6 +26,8 @@ class FedAvgEnsAggregator(object):
 
         self.worker_num = worker_num
         self.device = device
+        self.prev_models = prev_models
+        self.class_num = class_num
         self.args = args
         self.model_dict = dict()
         self.sample_num_dict = dict()
@@ -30,11 +35,46 @@ class FedAvgEnsAggregator(object):
         for idx in range(self.worker_num):
             self.flag_client_model_uploaded_dict[idx] = False
         self.model, _ = self.init_model(model)
+        self.ens_weights = self.init_ens_weights()
 
     def init_model(self, model):
         model_params = model.state_dict()
         # logging.info(model)
         return model, model_params
+
+    def init_ens_weights(self):
+        # Initialize the ensemble weights
+        # The equation is based on the AUE papar
+        mser = 0.0
+        for c in range(class_num):
+            py = 1/c
+            mser += py*((1-py)**2)
+        weights = []
+        # Calculate MSE for each previous model based on the
+        # most recent batch of data. We assume the training
+        # data here is the most recent batch (e.g., no data
+        # from previous training iterations)
+        for m in self.prev_models:
+            msei = total_sample = 0.
+            for client_idx in range(self.args.client_num_in_total):
+                mse, sample = self._mse(
+                    m, self.train_data_local_dict[client_idx])
+                msei += mse
+                total_sample += sample
+            msei = msei/total_sample
+            weights.append(1./(mser + msei + FedAvgEnsAggregatorAue.EPS))
+
+        # The most recent classifier got the "perfect" weighting
+        weights.append(1./(mser + FedAvgEnsAggregatorAue.EPS))
+        ens_weight = np.array(weights)
+
+        # Remove the classifier that has the smallest weight
+        if len(weights) > FedAvgEnsAggregatorAue.K:
+            rm_idx = np.argmin(ens_weight[:-1])
+            ens_weight = np.delete(ens_weight, [rm_idx])
+            self.prev_models.pop(rm_idx)
+        
+        return ens_weight/ens_weight.sum()  #normalize            
 
     def get_global_model_params(self):
         return self.model.state_dict()
@@ -145,6 +185,23 @@ class FedAvgEnsAggregator(object):
             wandb.log({"Test/Loss": test_loss, "round": round_idx})
             stats = {'test_acc': test_acc, 'test_loss': test_loss}
             logging.info(stats)
+
+    def _mse(self, model, test_data):
+        model.eval()
+        model.to(self.device)
+        mse = test_total = 0.
+        softmax = nn.Softmax(dim=1).to(self.device)
+        with torch.no_grad():
+            for batch_idx, (x, target) in enumerate(test_data):
+                x = x.to(self.device)
+                pred = model(x)
+                prob = softmax(pred)
+                prob_np = prob.detach().cpu().numpy()
+                pr = prob_np(np.arange(target.size(0)),
+                             target.numpy())
+                mse += ((1.0-pr)**2).sum()
+                test_total += target.size(0)
+        return mse, test_total
 
     def _infer(self, test_data):
         self.model.eval()
