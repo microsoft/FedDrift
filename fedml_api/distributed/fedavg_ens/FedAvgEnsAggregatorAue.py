@@ -5,6 +5,7 @@ import time
 import torch
 import wandb
 import numpy as np
+import pickle
 from torch import nn
 
 from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
@@ -93,7 +94,7 @@ class FedAvgEnsAggregatorAue(object):
             self.flag_client_model_uploaded_dict[idx] = False
         return True
 
-    def aggregate(self):
+    def aggregate(self, round_idx):
         start_time = time.time()
         model_list = []
         training_num = 0
@@ -120,6 +121,16 @@ class FedAvgEnsAggregatorAue(object):
         # update the global model which is cached at the server side
         self.model.load_state_dict(averaged_params)
 
+        # Save the models if we are reaching the end of training
+        if round_idx > (self.args.comm_round - 10):
+            model_list = []
+            for model in self.prev_models:
+                model_list.append(copy.deepcopy(model).cpu())
+            model_list.append(copy.deepcopy(self.model).cpu())
+            with open('model_iter_{}.pkl'.format(
+                    self.args.curr_train_iteration), 'wb') as f:
+                pickle.dump(model_list)
+
         end_time = time.time()
         logging.info("aggregate time cost: %d" % (end_time - start_time))
         return averaged_params
@@ -143,7 +154,6 @@ class FedAvgEnsAggregatorAue(object):
 
             test_num_samples = []
             test_tot_corrects = []
-            test_losses = []
             for client_idx in range(self.args.client_num_in_total):
                 # train data
                 train_tot_correct, train_num_sample, train_loss = self._infer(self.train_data_local_dict[client_idx])
@@ -152,10 +162,9 @@ class FedAvgEnsAggregatorAue(object):
                 train_losses.append(copy.deepcopy(train_loss))
 
                 # test data
-                test_tot_correct, test_num_sample, test_loss = self._infer(self.test_data_local_dict[client_idx])
+                test_tot_correct, test_num_sample = self._infer_ens(self.test_data_local_dict[client_idx])
                 test_tot_corrects.append(copy.deepcopy(test_tot_correct))
                 test_num_samples.append(copy.deepcopy(test_num_sample))
-                test_losses.append(copy.deepcopy(test_loss))
 
                 if self.args.report_client == 1:
                     wandb.log({"Train/Acc-CL-{}".format(client_idx): train_tot_correct/train_num_sample,
@@ -180,10 +189,8 @@ class FedAvgEnsAggregatorAue(object):
 
             # test on test dataset
             test_acc = sum(test_tot_corrects) / sum(test_num_samples)
-            test_loss = sum(test_losses) / sum(test_num_samples)
             wandb.log({"Test/Acc": test_acc, "round": round_idx})
-            wandb.log({"Test/Loss": test_loss, "round": round_idx})
-            stats = {'test_acc': test_acc, 'test_loss': test_loss}
+            stats = {'test_acc': test_acc}
             logging.info(stats)
 
     def _mse(self, model, test_data):
@@ -198,7 +205,7 @@ class FedAvgEnsAggregatorAue(object):
                 prob = softmax(pred)
                 prob_np = prob.detach().cpu().numpy()
                 pr = prob_np(np.arange(target.size(0)),
-                             target.numpy())
+                             copy.deepcopy(target).detach().cpu().numpy())
                 mse += ((1.0-pr)**2).sum()
                 test_total += target.size(0)
         return mse, test_total
@@ -223,3 +230,32 @@ class FedAvgEnsAggregatorAue(object):
                 test_total += target.size(0)
 
         return test_acc, test_total, test_loss
+
+    def _infer_ens(self, test_data):
+        # Set up the model list
+        model_list = self.prev_models.copy()
+        model_list.append(self.model)
+        for model in model_list:
+            model.eval()
+            model.to(self.device)
+
+        test_acc = test_total = 0.
+        with torch.no_grad():
+            for batch_idx, (x, target) in enumerate(test_data):
+                pred_pr = np.zeros((target.size(0), self.class_num))
+                x = x.to(self.device)
+                target = target.to(self.device)
+                # Go through all models
+                for model, weight in zip(model_list, self.ens_weights):
+                    pred = model(x)                    
+                    _, predicted = torch.max(pred, -1)
+                    predicted = predicted.detach().cpu().numpy()
+                    pred_pr[np.arange(target.size(0)), predicted] += weight
+                # Get the overall prediction
+                overall_pred = np.argmax(pred_pr, -1)
+                target_np = copy.deepcopy(target).detach().cpu().numpy()
+                correct = (overall_pred == target_np).sum()
+                test_acc += correct
+                test_total += target.size(0)
+
+        return test_acc, test_total
