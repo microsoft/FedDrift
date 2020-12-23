@@ -9,6 +9,7 @@ import psutil
 import setproctitle
 import torch
 import wandb
+import pickle
 
 # add the FedML root directory to the python path
 
@@ -143,6 +144,9 @@ def create_model(args, model_name, output_dim, feature_dim):
         model = FeedForwardNN(feature_dim, output_dim, feature_dim * 2)
     return model
 
+def load_prev_model(curr_train_iteration):
+    f = open('model_iter_{}.pkl'.format(i), 'rb')
+    return pickle.load(f))
 
 def init_training_device(process_ID, fl_worker_num, gpu_num_per_machine):
     # initialize the mapping from process ID to GPU ID: <process ID, GPU ID>
@@ -229,9 +233,12 @@ if __name__ == "__main__":
     model = create_model(args, model_name=args.model, output_dim=class_num,
                          feature_dim = feature_num)
 
+    # load models from previous iterations and the ensemble weights
+    prev_models = load_prev_model(args.concept_drift_algo, args.curr_train_iteration)    
+
     # start "federated averaging (FedAvg) with ensembled" for this round
     FedML_FedAvgEns_distributed(process_id, worker_number, device, comm,
                                 model, train_data_num, train_data_global,
                                 test_data_global, train_data_local_num_dict,
                                 train_data_local_dict, test_data_local_dict,
-                                args)
+                                prev_models, class_num, args)
