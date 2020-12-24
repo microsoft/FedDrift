@@ -93,7 +93,7 @@ def add_args(parser):
     parser.add_argument('--report_client', type=int, default=0,
                         help='Whether reporting the accuracy of each client')
 
-    parser.add_argument('--retrain_data', type=str, default='all',
+    parser.add_argument('--retrain_data', type=str, default='win-1',
                         help='which data to be included for retraining')
 
     parser.add_argument('--concept_drift_algo', type=str, default='aue',
@@ -145,8 +145,11 @@ def create_model(args, model_name, output_dim, feature_dim):
     return model
 
 def load_prev_model(curr_train_iteration):
-    f = open('model_iter_{}.pkl'.format(i), 'rb')
-    return pickle.load(f))
+    if curr_train_iteration == 0:
+        return []
+    else:
+        f = open('model_iter_{}.pkl'.format(i), 'rb')
+        return pickle.load(f)
 
 def init_training_device(process_ID, fl_worker_num, gpu_num_per_machine):
     # initialize the mapping from process ID to GPU ID: <process ID, GPU ID>
