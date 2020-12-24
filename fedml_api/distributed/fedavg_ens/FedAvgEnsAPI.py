@@ -1,9 +1,9 @@
 from mpi4py import MPI
 
-from fedml_api.distributed.fedavg.FedAvgEnsAggregatorAue import FedAvgEnsAggregatorAue
-from fedml_api.distributed.fedavg.FedAvgEnsTrainer import FedAvgEnsTrainer
-from fedml_api.distributed.fedavg.FedAvgEnsClientManager import FedAvgEnsClientManager
-from fedml_api.distributed.fedavg.FedAvgEnsServerManager import FedAvgEnsServerManager
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAue import FedAvgEnsAggregatorAue
+from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
+from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
+from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
 
 
 def FedML_init():
