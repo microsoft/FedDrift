@@ -203,7 +203,7 @@ if __name__ == "__main__":
                 str(args.epochs) + "-lr" + str(args.lr) +
                 "-iter" + str(args.curr_train_iteration) +
                 "-dt" + str(args.drift_together) +
-                "-" + args.retrain_data,
+                "-" + args.concept_drift_algo,
             config=args
         )
 
