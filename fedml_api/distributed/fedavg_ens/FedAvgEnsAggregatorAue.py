@@ -37,6 +37,8 @@ class FedAvgEnsAggregatorAue(object):
             self.flag_client_model_uploaded_dict[idx] = False
         self.model, _ = self.init_model(model)
         self.ens_weights = self.init_ens_weights()
+        logging.info("Ensemble weights==>")
+        logging.info(self.ens_weights)
 
     def init_model(self, model):
         model_params = model.state_dict()
@@ -46,10 +48,8 @@ class FedAvgEnsAggregatorAue(object):
     def init_ens_weights(self):
         # Initialize the ensemble weights
         # The equation is based on the AUE papar
-        mser = 0.0
-        for c in range(class_num):
-            py = 1/c
-            mser += py*((1-py)**2)
+        py = 1.0/self.class_num
+        mser = ((1-py)**2)
         weights = []
         # Calculate MSE for each previous model based on the
         # most recent batch of data. We assume the training
@@ -129,7 +129,7 @@ class FedAvgEnsAggregatorAue(object):
             model_list.append(copy.deepcopy(self.model).cpu())
             with open('model_iter_{}.pkl'.format(
                     self.args.curr_train_iteration), 'wb') as f:
-                pickle.dump(model_list)
+                pickle.dump(model_list, f)
 
         end_time = time.time()
         logging.info("aggregate time cost: %d" % (end_time - start_time))
@@ -204,8 +204,8 @@ class FedAvgEnsAggregatorAue(object):
                 pred = model(x)
                 prob = softmax(pred)
                 prob_np = prob.detach().cpu().numpy()
-                pr = prob_np(np.arange(target.size(0)),
-                             copy.deepcopy(target).detach().cpu().numpy())
+                pr = prob_np[np.arange(target.size(0)),
+                             copy.deepcopy(target).detach().cpu().numpy()]
                 mse += ((1.0-pr)**2).sum()
                 test_total += target.size(0)
         return mse, test_total

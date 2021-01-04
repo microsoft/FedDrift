@@ -148,7 +148,7 @@ def load_prev_model(curr_train_iteration):
     if curr_train_iteration == 0:
         return []
     else:
-        f = open('model_iter_{}.pkl'.format(i), 'rb')
+        f = open('model_iter_{}.pkl'.format(curr_train_iteration-1), 'rb')
         return pickle.load(f)
 
 def init_training_device(process_ID, fl_worker_num, gpu_num_per_machine):
@@ -237,7 +237,7 @@ if __name__ == "__main__":
                          feature_dim = feature_num)
 
     # load models from previous iterations and the ensemble weights
-    prev_models = load_prev_model(args.concept_drift_algo, args.curr_train_iteration)    
+    prev_models = load_prev_model(args.curr_train_iteration)    
 
     # start "federated averaging (FedAvg) with ensembled" for this round
     FedML_FedAvgEns_distributed(process_id, worker_number, device, comm,
