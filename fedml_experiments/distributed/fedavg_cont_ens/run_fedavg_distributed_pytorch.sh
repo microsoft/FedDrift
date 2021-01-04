@@ -60,7 +60,7 @@ do
            --curr_train_iteration $it \
            --drift_together $DRIFT_TOGETHER \
            --report_client 1 \
-           --retrain_data win-1 \
+           --retrain_data win1 \
            --concept_drift_algo $CL_ALGO
 done
 
