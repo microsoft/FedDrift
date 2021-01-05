@@ -1,6 +1,7 @@
 from mpi4py import MPI
 
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAue import FedAvgEnsAggregatorAue
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAuePc import FedAvgEnsAggregatorAuePc
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
 from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
 from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
@@ -32,6 +33,10 @@ def init_server(args, device, comm, rank, size, model, train_data_num, train_dat
         aggregator = FedAvgEnsAggregatorAue(train_data_global, test_data_global, train_data_num,
                                             train_data_local_dict, test_data_local_dict, train_data_local_num_dict, worker_num,
                                             device, model, prev_models, class_num, args)
+    elif args.concept_drift_algo == "auepc":
+        aggregator = FedAvgEnsAggregatorAuePc(train_data_global, test_data_global, train_data_num,
+                                              train_data_local_dict, test_data_local_dict, train_data_local_num_dict, worker_num,
+                                              device, model, prev_models, class_num, args)
     else:
         raise NameError('concept_drift_algo')
 
