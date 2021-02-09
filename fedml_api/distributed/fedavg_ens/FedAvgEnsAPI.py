@@ -6,12 +6,20 @@ from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
 from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
 from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
 
+from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AUE_data_loader, DriftSurf_data_loader
+
 
 def FedML_init():
     comm = MPI.COMM_WORLD
     process_id = comm.Get_rank()
     worker_number = comm.Get_size()
     return comm, process_id, worker_number
+
+def FedML_FedAvgEns_data_loader(args, loader_func):
+    if args.concept_drift_algo in {"aue", "auepc"}:
+        return AUE_data_loader(args, loader_func)
+    elif args.concept_drift_algo == "driftsurf":
+        return DriftSurf_data_loader(args, loader_func)
 
 
 def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, model, train_data_num, train_data_global, test_data_global,
