@@ -1,7 +1,6 @@
 import logging
 
 from fedml_api.distributed.fedavg_ens.message_define import MyMessage
-from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
 from fedml_core.distributed.client.client_manager import ClientManager
 from fedml_core.distributed.communication.message import Message
 
@@ -26,9 +25,6 @@ class FedAvgEnsClientManager(ClientManager):
         global_model_params = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_PARAMS)
         client_index = msg_params.get(MyMessage.MSG_ARG_KEY_CLIENT_INDEX)
 
-        if self.args.is_mobile == 1:
-            global_model_params = transform_list_to_tensor(global_model_params)
-
         self.trainer.update_model(global_model_params)
         self.trainer.update_dataset(int(client_index))
         self.round_idx = 0
@@ -43,9 +39,6 @@ class FedAvgEnsClientManager(ClientManager):
         model_params = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_PARAMS)
         client_index = msg_params.get(MyMessage.MSG_ARG_KEY_CLIENT_INDEX)
 
-        if self.args.is_mobile == 1:
-            model_params = transform_list_to_tensor(model_params)
-
         self.trainer.update_model(model_params)
         self.trainer.update_dataset(int(client_index))
         self.round_idx += 1
@@ -53,13 +46,12 @@ class FedAvgEnsClientManager(ClientManager):
         if self.round_idx == self.num_rounds - 1:
             self.finish()
 
-    def send_model_to_server(self, receive_id, weights, local_sample_num):
+    def send_model_to_server(self, receive_id, weights_and_num_samples):
         message = Message(MyMessage.MSG_TYPE_C2S_SEND_MODEL_TO_SERVER, self.get_sender_id(), receive_id)
-        message.add_params(MyMessage.MSG_ARG_KEY_MODEL_PARAMS, weights)
-        message.add_params(MyMessage.MSG_ARG_KEY_NUM_SAMPLES, local_sample_num)
+        message.add_params(MyMessage.MSG_ARG_KEY_MODEL_AND_NUM_SAMPLES, weights_and_num_samples)
         self.send_message(message)
 
     def __train(self):
         logging.info("#######training########### round_id = %d" % self.round_idx)
-        weights, local_sample_num = self.trainer.train()
-        self.send_model_to_server(0, weights, local_sample_num)
+        weights_and_num_samples = self.trainer.train()
+        self.send_model_to_server(0, weights_and_num_samples)
