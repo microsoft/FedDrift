@@ -25,7 +25,7 @@ from fedml_api.model.linear.lr import LogisticRegression
 
 from fedml_api.model.fnn.fnn import FeedForwardNN
 
-from fedml_api.distributed.fedavg_ens.FedAvgEnsAPI import FedML_init, FedML_FedAvgEns_distributed
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAPI import FedML_init, FedML_FedAvgEns_distributed, FedML_FedAvgEns_data_loader
 
 
 def add_args(parser):
@@ -99,14 +99,17 @@ def add_args(parser):
     parser.add_argument('--concept_drift_algo', type=str, default='aue',
                         help='The algorithm to handle concept drift')
 
+    parser.add_argument('--ensemble_window', type=int, default=5,
+                        help='The number of models to keep in the ensemble')
+
     args = parser.parse_args()
     return args
 
-
-def load_data(args, dataset_name):
+def load_data_by_dataset(args):
+    dataset_name = args.dataset
     logging.info("load_data. dataset_name = %s" % dataset_name)
     
-    if dataset_name == "sea":        
+
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
@@ -131,6 +134,9 @@ def load_data(args, dataset_name):
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
                class_num, feature_num]
     return dataset
+
+def load_data(args):
+    return 
 
 
 def create_model(args, model_name, output_dim, feature_dim):
@@ -226,22 +232,21 @@ if __name__ == "__main__":
     device = init_training_device(process_id, worker_number - 1, args.gpu_num_per_server)
 
     # load data
-    dataset = load_data(args, args.dataset)
-    [train_data_num, test_data_num, train_data_global, test_data_global,
-     train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-     class_num, feature_num] = dataset
+    datasets = FedML_FedAvgEns_data_loader(args, load_data_by_dataset)
+    #dataset = load_data(args)
+    #[train_data_num, test_data_num, train_data_global, test_data_global,
+    # train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
+    # class_num, feature_num] = dataset
 
     # create model.
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.
-    model = create_model(args, model_name=args.model, output_dim=class_num,
-                         feature_dim = feature_num)
-
-    # load models from previous iterations and the ensemble weights
-    prev_models = load_prev_model(args.curr_train_iteration)    
+    models = []
+    class_num = datasets[0][-1]
+    feature_num = datasets[0][-2]
+    for m in range(len(datasets)):
+        models.append(create_model(args, model_name=args.model, output_dim=class_num,
+                                   feature_dim = feature_num))
 
     # start "federated averaging (FedAvg) with ensembled" for this round
     FedML_FedAvgEns_distributed(process_id, worker_number, device, comm,
-                                model, train_data_num, train_data_global,
-                                test_data_global, train_data_local_num_dict,
-                                train_data_local_dict, test_data_local_dict,
-                                prev_models, class_num, args)
+                                models, datasets, class_num, args)

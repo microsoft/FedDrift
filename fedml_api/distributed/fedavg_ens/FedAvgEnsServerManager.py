@@ -31,10 +31,9 @@ class FedAvgEnsServerManager(ServerManager):
 
     def handle_message_receive_model_from_client(self, msg_params):
         sender_id = msg_params.get(MyMessage.MSG_ARG_KEY_SENDER)
-        model_params = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_PARAMS)
-        local_sample_number = msg_params.get(MyMessage.MSG_ARG_KEY_NUM_SAMPLES)
+        weights_and_num_samples = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_AND_NUM_SAMPLES)
 
-        self.aggregator.add_local_trained_result(sender_id - 1, model_params, local_sample_number)
+        self.aggregator.add_local_trained_result(sender_id - 1, weights_and_num_samples)
         b_all_received = self.aggregator.check_whether_all_receive()
         logging.info("b_all_received = " + str(b_all_received))
         if b_all_received:
@@ -51,9 +50,9 @@ class FedAvgEnsServerManager(ServerManager):
             client_indexes = self.aggregator.client_sampling(self.round_idx, self.args.client_num_in_total,
                                                              self.args.client_num_per_round)
             print("size = %d" % self.size)
-            if self.args.is_mobile == 1:
-                print("transform_tensor_to_list")
-                global_model_params = transform_tensor_to_list(global_model_params)
+            #if self.args.is_mobile == 1:
+            #    print("transform_tensor_to_list")
+            #    global_model_params = transform_tensor_to_list(global_model_params)
 
             for receiver_id in range(1, self.size):
                 self.send_message_sync_model_to_client(receiver_id, global_model_params, client_indexes[receiver_id-1])

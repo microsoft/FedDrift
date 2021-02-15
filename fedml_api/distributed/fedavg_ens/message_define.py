@@ -17,7 +17,7 @@ class MyMessage(object):
     """
         message payload keywords definition
     """
-    MSG_ARG_KEY_NUM_SAMPLES = "num_samples"
     MSG_ARG_KEY_MODEL_PARAMS = "model_params"
     MSG_ARG_KEY_CLIENT_INDEX = "client_idx"
+    MSG_ARG_KEY_MODEL_AND_NUM_SAMPLES = "model_and_num_samples"
 
