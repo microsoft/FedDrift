@@ -34,6 +34,7 @@ class FedAvgEnsServerManager(ServerManager):
         weights_and_num_samples = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_AND_NUM_SAMPLES)
 
         self.aggregator.add_local_trained_result(sender_id - 1, weights_and_num_samples)
+        
         b_all_received = self.aggregator.check_whether_all_receive()
         logging.info("b_all_received = " + str(b_all_received))
         if b_all_received:

@@ -108,8 +108,8 @@ def add_args(parser):
 def load_data_by_dataset(args):
     dataset_name = args.dataset
     logging.info("load_data. dataset_name = %s" % dataset_name)
-    
 
+    if dataset_name == "sea":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
         train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
@@ -149,13 +149,6 @@ def create_model(args, model_name, output_dim, feature_dim):
         logging.info("FeedForwardNN, feature_dim = %s" % feature_dim)
         model = FeedForwardNN(feature_dim, output_dim, feature_dim * 2)
     return model
-
-def load_prev_model(curr_train_iteration):
-    if curr_train_iteration == 0:
-        return []
-    else:
-        f = open('model_iter_{}.pkl'.format(curr_train_iteration-1), 'rb')
-        return pickle.load(f)
 
 def init_training_device(process_ID, fl_worker_num, gpu_num_per_machine):
     # initialize the mapping from process ID to GPU ID: <process ID, GPU ID>

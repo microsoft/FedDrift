@@ -49,9 +49,10 @@ class FedAvgEnsTrainer(object):
             # change to train mode
             model.train()
 
-            train_local = self.train_data_local_dicts[mod_idx][client_index]
-            local_sample_number = self.train_data_local_num_dict[mod_idx][client_index]
+            train_local = self.train_data_local_dicts[mod_idx][self.client_index]
+            local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
             criterion = self.criterions[mod_idx]
+            optimizer = self.optimizers[mod_idx]
 
             epoch_loss = []
             for epoch in range(self.args.epochs):
@@ -59,11 +60,11 @@ class FedAvgEnsTrainer(object):
                 for batch_idx, (x, labels) in enumerate(train_local):
                     # logging.info(images.shape)
                     x, labels = x.to(self.device), labels.to(self.device)
-                    self.optimizer.zero_grad()
+                    optimizer.zero_grad()
                     log_probs = model(x)
                     loss = criterion(log_probs, labels)
                     loss.backward()
-                    self.optimizer.step()
+                    optimizer.step()
                     batch_loss.append(loss.item())
                 if len(batch_loss) > 0:
                     epoch_loss.append(sum(batch_loss) / len(batch_loss))
@@ -75,6 +76,6 @@ class FedAvgEnsTrainer(object):
             # transform Tensor to list
             if self.args.is_mobile == 1:
                 weights = transform_tensor_to_list(weights)
-            results.append((weights, self.local_sample_number))
+            results.append((weights, local_sample_number))
             
         return results

@@ -48,7 +48,7 @@ class FedAvgEnsAggregatorAue(object):
         mser = ((1-py)**2)
         ens_weights = np.full(len(self.models),
                               1./(mser + FedAvgEnsAggregatorAue.EPS))
-        return ens_weight/ens_weight.sum()  #normalize
+        return ens_weights/ens_weights.sum()  #normalize
     
 
     def update_ens_weights(self):
@@ -134,7 +134,7 @@ class FedAvgEnsAggregatorAue(object):
             
         end_time = time.time()
         logging.info("aggregate time cost: %d" % (end_time - start_time))
-        return averaged_params
+        return self.get_global_model_params()
 
     def client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
         if client_num_in_total == client_num_per_round:
@@ -163,7 +163,7 @@ class FedAvgEnsAggregatorAue(object):
                 train_losses.append(copy.deepcopy(train_loss))
 
                 # test data
-                test_tot_correct, test_num_sample = self._infer_ens(self.test_data_local_dict[0][client_idx])
+                test_tot_correct, test_num_sample = self._infer_ens(self.test_data_local_dicts[0][client_idx])
                 test_tot_corrects.append(copy.deepcopy(test_tot_correct))
                 test_num_samples.append(copy.deepcopy(test_num_sample))
 
@@ -212,8 +212,8 @@ class FedAvgEnsAggregatorAue(object):
         return mse, test_total
 
     def _infer(self, test_data):
-        self.model.eval()
-        self.model.to(self.device)
+        self.models[0].eval()
+        self.models[0].to(self.device)
 
         test_loss = test_acc = test_total = 0.
         criterion = nn.CrossEntropyLoss().to(self.device)
@@ -221,7 +221,7 @@ class FedAvgEnsAggregatorAue(object):
             for batch_idx, (x, target) in enumerate(test_data):
                 x = x.to(self.device)
                 target = target.to(self.device)
-                pred = self.model(x)
+                pred = self.models[0](x)
                 loss = criterion(pred, target)
                 _, predicted = torch.max(pred, -1)
                 correct = predicted.eq(target).sum()
@@ -244,7 +244,7 @@ class FedAvgEnsAggregatorAue(object):
                 x = x.to(self.device)
                 target = target.to(self.device)
                 # Go through all models
-                for model, weight in zip(model_list, self.ens_weights):
+                for model, weight in zip(self.models, self.ens_weights):
                     pred = model(x)                    
                     _, predicted = torch.max(pred, -1)
                     predicted = predicted.detach().cpu().numpy()
