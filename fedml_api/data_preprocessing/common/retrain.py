@@ -15,10 +15,10 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
                                        csv_file_name.format(c, it))
                 train_data[c] = train_data[c].append(train_df,
                                                      ignore_index=True)
-    elif retrain_method.startswith("win"):
+    elif retrain_method.startswith("win-"):
         # Use a window-based approach and only retain data from
         # recent W iterations
-        win_size = int(retrain_method.replace("win", ""))
+        win_size = int(retrain_method.replace("win-", ""))
         start_iter = max(0, current_train_iteration - win_size + 1)
         for it in range(start_iter, current_train_iteration + 1):
             for c in range(num_client):

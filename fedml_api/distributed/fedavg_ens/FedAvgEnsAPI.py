@@ -24,11 +24,25 @@ def FedML_FedAvgEns_data_loader(args, loader_func):
 
 def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
                                 datasets, class_num, args):
-    datasets_t = [list(x) for x in zip(*datasets)]
-    [train_data_nums, test_data_nums, train_data_globals, test_data_globals,
-     train_data_local_num_dicts, train_data_local_dicts, test_data_local_dicts,
-     class_nums, feature_nums] = datasets_t
-    
+    train_data_nums = []
+    test_data_nums = []
+    train_data_globals = []
+    test_data_globals = []
+    train_data_local_num_dicts = []
+    train_data_local_dicts = []
+    test_data_local_dicts = []
+    for ds in datasets:
+        [train_data_num, test_data_num, train_data_global, test_data_global,
+         train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
+         class_num, feature_num] = ds
+        train_data_nums.append(train_data_num)
+        test_data_nums.append(test_data_num)
+        train_data_globals.append(train_data_globals)
+        test_data_globals.append(test_data_globals)
+        train_data_local_num_dicts.append(train_data_local_num_dict)
+        train_data_local_dicts.append(train_data_local_dict)
+        test_data_local_dicts.append(test_data_local_dict)
+            
     if process_id == 0:
         init_server(args, device, comm, process_id, worker_number, models, train_data_nums, train_data_globals,
                     test_data_globals, train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
@@ -62,7 +76,7 @@ def init_server(args, device, comm, rank, size, models, train_data_nums, train_d
 # - client should be modified to decentralized worker
 # - add group id 
 # - Add MPC related setting
-def init_client(args, device, comm, process_id, size, model, train_data_nums, train_data_local_num_dicts, train_data_local_dicts):
+def init_client(args, device, comm, process_id, size, models, train_data_nums, train_data_local_num_dicts, train_data_local_dicts):
     # trainer
     client_index = process_id - 1
     trainer = FedAvgEnsTrainer(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, device, models, args)
