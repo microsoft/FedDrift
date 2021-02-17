@@ -64,13 +64,17 @@ class FedAvgEnsAggregatorAue(object):
         for m_idx, model in enumerate(self.models[1:]):
             msei = total_sample = 0.
             for client_idx in range(self.args.client_num_in_total):
+                # Always calculate MSE based on the most recent batch
                 mse, sample = self._mse(
-                    model, self.train_data_local_dicts[m_idx][client_idx])
+                    model, self.train_data_local_dicts[0][client_idx])
                 msei += mse
                 total_sample += sample
             msei = msei/total_sample
             self.ens_weights[m_idx] = 1./(mser + msei + \
                                           FedAvgEnsAggregatorAue.EPS)
+
+        # The most recent model gets the "perfect" score
+        self.ens_weights[0] = 1./(mser + FedAvgEnsAggregatorAue.EPS)
 
         #normalize
         self.ens_weights = self.ens_weights/self.ens_weights.sum()
