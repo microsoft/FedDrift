@@ -234,8 +234,8 @@ if __name__ == "__main__":
     # create model.
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.
     models = []
-    class_num = datasets[0][-1]
-    feature_num = datasets[0][-2]
+    class_num = datasets[0][-2]
+    feature_num = datasets[0][-1]
     for m in range(len(datasets)):
         models.append(create_model(args, model_name=args.model, output_dim=class_num,
                                    feature_dim = feature_num))
