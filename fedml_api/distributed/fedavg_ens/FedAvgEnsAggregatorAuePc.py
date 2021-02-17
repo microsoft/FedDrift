@@ -8,87 +8,89 @@ import numpy as np
 import pickle
 from torch import nn
 
-from fedml_api.distributed.fedavg.utils import transform_list_to_tensor
+from fedml_api.distributed.fedavg.utils import transform_list_to_tensor, transform_tensor_to_list
 
 
 class FedAvgEnsAggregatorAuePc(object):
     EPS = 1e-20
-    K = 5
-    def __init__(self, train_global, test_global, all_train_data_num,
-                 train_data_local_dict, test_data_local_dict, train_data_local_num_dict,
-                 worker_num, device, model, prev_models, class_num, args):
-        self.train_global = train_global
-        self.test_global = test_global
-        self.all_train_data_num = all_train_data_num
+    def __init__(self, train_globals, test_globals, all_train_data_nums,
+                 train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
+                 worker_num, device, models, class_num, args):
+        self.train_globals = train_globals
+        self.test_globals = test_globals
+        self.all_train_data_nums = all_train_data_nums
 
-        self.train_data_local_dict = train_data_local_dict
-        self.test_data_local_dict = test_data_local_dict
-        self.train_data_local_num_dict = train_data_local_num_dict
+        self.train_data_local_dicts = train_data_local_dicts
+        self.test_data_local_dicts = test_data_local_dicts
+        self.train_data_local_num_dicts = train_data_local_num_dicts
 
         self.worker_num = worker_num
         self.device = device
-        self.prev_models = prev_models
         self.class_num = class_num
         self.args = args
-        self.model_dict = dict()
-        self.sample_num_dict = dict()
+        self.weights_and_num_samples_dict = dict()
         self.flag_client_model_uploaded_dict = dict()
         for idx in range(self.worker_num):
             self.flag_client_model_uploaded_dict[idx] = False
-        self.model, _ = self.init_model(model)
-        self.ens_weights = self.init_ens_weights()
-        print("Ensemble weights==>")
-        print(self.ens_weights)
-        logging.info("Ensemble weights==>")
-        logging.info(self.ens_weights)
+        self.models = self.init_model(models)
+        self.ens_weights = self.init_ens_weights()        
 
-    def init_model(self, model):
-        model_params = model.state_dict()
+    def init_model(self, models):
+        for m in models:
+            model_params = m.state_dict()
         # logging.info(model)
-        return model, model_params
+        return models
 
     def init_ens_weights(self):
+        # Initialize the ensemble weights
+        # At the beginning we assign all models to be "perfect"
+        all_client_weights = []        
+        py = 1.0/self.class_num
+        mser = ((1-py)**2)
+        for client_idx in range(self.args.client_num_in_total):
+            ens_weights = np.full(len(self.models),
+                                  1./(mser + FedAvgEnsAggregatorAuePc.EPS))
+            #normalize
+            all_client_weights.append(ens_weights/ens_weights.sum())
+        return all_client_weights
+    
+
+    def update_ens_weights(self):
         # Initialize the ensemble weights
         # The equation is based on the AUE papar
         py = 1.0/self.class_num
         mser = ((1-py)**2)
-        all_client_weights = []
 
-        # We always remove the oldest model because it would be
-        # very complex to manage different model list for different
-        # client
-        while len(self.prev_models) >= FedAvgEnsAggregatorAuePc.K:
-            self.prev_models.pop(0)
-        
         # Calculate MSE for each previous model based on the
         # most recent batch of data. We assume the training
         # data here is the most recent batch (e.g., no data
         # from previous training iterations)
-        # Here, we calculate weights for each client        
+        # Here, we calculate weights for each client
         for client_idx in range(self.args.client_num_in_total):
-            model_weights = []
-            for m in self.prev_models:
+            for m_idx, model in enumerate(self.models[1:]):
+                # Always use the most recent batch for MSE
                 mse, sample = self._mse(
-                    m, self.train_data_local_dict[client_idx])
+                    model, self.train_data_local_dicts[0][client_idx])
                 msei = mse/sample
-                model_weights.append(
-                    1./(mser + msei + FedAvgEnsAggregatorAuePc.EPS))
-                                
-            # The most recent classifier got the "perfect" weighting
-            model_weights.append(1./(mser + FedAvgEnsAggregatorAuePc.EPS))
-            ens_weight = np.array(model_weights)
-            # Normalize the weights and add them to the overall list
-            all_client_weights.append(ens_weight/ens_weight.sum()) 
+                self.ens_weights[client_idx][m_idx] = 1./(mser + msei + \
+                                                          FedAvgEnsAggregatorAuePc.EPS)
+            # The most recent model gets the "perfect" score
+            self.ens_weights[client_idx][0] = 1./(mser + FedAvgEnsAggregatorAuePc.EPS)
+            #normalize
+            self.ens_weights[client_idx] = self.ens_weights[client_idx]/self.ens_weights[client_idx].sum()
+
+            logging.info('Ensemble weights for Client {}==>'.format(client_idx))
+            logging.info(self.ens_weights[client_idx])        
         
-        return all_client_weights
+        return
 
     def get_global_model_params(self):
-        return self.model.state_dict()
+        model_params = [model.state_dict() for model in self.models]
+        return model_params
 
-    def add_local_trained_result(self, index, model_params, sample_num):
+    def add_local_trained_result(self, index, weights_and_num_samples):
         logging.info("add_model. index = %d" % index)
-        self.model_dict[index] = model_params
-        self.sample_num_dict[index] = sample_num
+        self.weights_and_num_samples_dict[index] = weights_and_num_samples
         self.flag_client_model_uploaded_dict[index] = True
 
     def check_whether_all_receive(self):
@@ -101,44 +103,42 @@ class FedAvgEnsAggregatorAuePc(object):
 
     def aggregate(self, round_idx):
         start_time = time.time()
-        model_list = []
-        training_num = 0
 
-        for idx in range(self.worker_num):
-            if self.args.is_mobile == 1:
-                self.model_dict[idx] = transform_list_to_tensor(self.model_dict[idx])
-            model_list.append((self.sample_num_dict[idx], self.model_dict[idx]))
-            training_num += self.sample_num_dict[idx]
-
-        logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
-
-        # logging.info("################aggregate: %d" % len(model_list))
-        (num0, averaged_params) = model_list[0]
-        for k in averaged_params.keys():
-            for i in range(0, len(model_list)):
-                local_sample_number, local_model_params = model_list[i]
-                w = local_sample_number / training_num
-                if i == 0:
-                    averaged_params[k] = local_model_params[k] * w
-                else:
-                    averaged_params[k] += local_model_params[k] * w
-
-        # update the global model which is cached at the server side
-        self.model.load_state_dict(averaged_params)
-
-        # Save the models if we are reaching the end of training
-        if round_idx > (self.args.comm_round - 10):
+        # Do aggregate for all models one by one
+        for m_idx in range(len(self.models)):
             model_list = []
-            for model in self.prev_models:
-                model_list.append(copy.deepcopy(model).cpu())
-            model_list.append(copy.deepcopy(self.model).cpu())
-            with open('model_iter_{}.pkl'.format(
-                    self.args.curr_train_iteration), 'wb') as f:
-                pickle.dump(model_list, f)
+            training_num = 0
 
+            for idx in range(self.worker_num):
+                model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
+                if self.args.is_mobile == 1:
+                    model = transform_list_to_tensor(model)
+                model_list.append((num_sample, model))
+                training_num += num_sample
+
+            #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
+
+            # logging.info("################aggregate: %d" % len(model_list))
+            (num0, averaged_params) = model_list[0]
+            for k in averaged_params.keys():
+                for i in range(0, len(model_list)):
+                    local_sample_number, local_model_params = model_list[i]
+                    w = local_sample_number / training_num
+                    if i == 0:
+                        averaged_params[k] = local_model_params[k] * w
+                    else:
+                        averaged_params[k] += local_model_params[k] * w
+
+            # update the global model which is cached at the server side
+            self.models[m_idx].load_state_dict(averaged_params)
+
+        # Update ensemble weights
+        if round_idx % 10 == 0 or round_idx > (self.args.comm_round - 10):
+            self.update_ens_weights()
+            
         end_time = time.time()
         logging.info("aggregate time cost: %d" % (end_time - start_time))
-        return averaged_params
+        return self.get_global_model_params()
 
     def client_sampling(self, round_idx, client_num_in_total, client_num_per_round):
         if client_num_in_total == client_num_per_round:
@@ -161,14 +161,15 @@ class FedAvgEnsAggregatorAuePc(object):
             test_tot_corrects = []
             for client_idx in range(self.args.client_num_in_total):
                 # train data
-                train_tot_correct, train_num_sample, train_loss = self._infer(self.train_data_local_dict[client_idx])
+                train_tot_correct, train_num_sample, train_loss = self._infer(self.train_data_local_dicts[0][client_idx])
                 train_tot_corrects.append(copy.deepcopy(train_tot_correct))
                 train_num_samples.append(copy.deepcopy(train_num_sample))
                 train_losses.append(copy.deepcopy(train_loss))
 
                 # test data
-                test_tot_correct, test_num_sample = self._infer_ens(self.test_data_local_dict[client_idx],
-                                                                    self.ens_weights[client_idx])
+                test_tot_correct, test_num_sample = self._infer_ens(
+                    self.test_data_local_dicts[0][client_idx],
+                    self.ens_weights[client_idx])
                 test_tot_corrects.append(copy.deepcopy(test_tot_correct))
                 test_num_samples.append(copy.deepcopy(test_num_sample))
 
@@ -217,8 +218,8 @@ class FedAvgEnsAggregatorAuePc(object):
         return mse, test_total
 
     def _infer(self, test_data):
-        self.model.eval()
-        self.model.to(self.device)
+        self.models[0].eval()
+        self.models[0].to(self.device)
 
         test_loss = test_acc = test_total = 0.
         criterion = nn.CrossEntropyLoss().to(self.device)
@@ -226,7 +227,7 @@ class FedAvgEnsAggregatorAuePc(object):
             for batch_idx, (x, target) in enumerate(test_data):
                 x = x.to(self.device)
                 target = target.to(self.device)
-                pred = self.model(x)
+                pred = self.models[0](x)
                 loss = criterion(pred, target)
                 _, predicted = torch.max(pred, -1)
                 correct = predicted.eq(target).sum()
@@ -238,10 +239,7 @@ class FedAvgEnsAggregatorAuePc(object):
         return test_acc, test_total, test_loss
 
     def _infer_ens(self, test_data, ens_weights):
-        # Set up the model list
-        model_list = self.prev_models.copy()
-        model_list.append(self.model)
-        for model in model_list:
+        for model in self.models:
             model.eval()
             model.to(self.device)
 
@@ -252,8 +250,8 @@ class FedAvgEnsAggregatorAuePc(object):
                 x = x.to(self.device)
                 target = target.to(self.device)
                 # Go through all models
-                for model, weight in zip(model_list, ens_weights):
-                    pred = model(x)  
+                for model, weight in zip(self.models, ens_weights):
+                    pred = model(x)                    
                     _, predicted = torch.max(pred, -1)
                     predicted = predicted.detach().cpu().numpy()
                     pred_pr[np.arange(target.size(0)), predicted] += weight
