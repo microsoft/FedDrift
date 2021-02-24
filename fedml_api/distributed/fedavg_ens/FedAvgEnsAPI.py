@@ -2,6 +2,7 @@ from mpi4py import MPI
 
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAue import FedAvgEnsAggregatorAue
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAuePc import FedAvgEnsAggregatorAuePc
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorDriftSurf import FedAvgEnsAggregatorDriftSurf
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
 from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
 from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
@@ -15,11 +16,11 @@ def FedML_init():
     worker_number = comm.Get_size()
     return comm, process_id, worker_number
 
-def FedML_FedAvgEns_data_loader(args, loader_func):
+def FedML_FedAvgEns_data_loader(args, loader_func, device):
     if args.concept_drift_algo in {"aue", "auepc"}:
-        return AUE_data_loader(args, loader_func)
+        return AUE_data_loader(args, loader_func, device)
     elif args.concept_drift_algo == "driftsurf":
-        return DriftSurf_data_loader(args, loader_func)
+        return DriftSurf_data_loader(args, loader_func, device)
 
 
 def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
@@ -42,6 +43,8 @@ def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
         train_data_local_num_dicts.append(train_data_local_num_dict)
         train_data_local_dicts.append(train_data_local_dict)
         test_data_local_dicts.append(test_data_local_dict)
+
+    print(train_data_nums)
             
     if process_id == 0:
         init_server(args, device, comm, process_id, worker_number, models, train_data_nums, train_data_globals,
@@ -64,6 +67,10 @@ def init_server(args, device, comm, rank, size, models, train_data_nums, train_d
         aggregator = FedAvgEnsAggregatorAuePc(train_data_globals, test_data_globals, train_data_nums,
                                               train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
                                               device, models, class_num, args)
+    elif args.concept_drift_algo == "driftsurf":
+        aggregator = FedAvgEnsAggregatorDriftSurf(train_data_globals, test_data_globals, train_data_nums,
+                                                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                                  device, models, class_num, args)
     else:
         raise NameError('concept_drift_algo')
 

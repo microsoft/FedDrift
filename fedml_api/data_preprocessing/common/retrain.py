@@ -40,6 +40,19 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
                 for w in range(weight):
                     train_data[c] = train_data[c].append(train_df,
                                                          ignore_index=True)
+
+    elif retrain_method.startswith("sel-"):
+        # Load data from specific iterations
+        select_iter = retrain_method.replace("sel-", "").split(",")
+        for it in select_iter:
+            itn = int(it)
+            for c in range(num_client):
+                train_df = pd.read_csv(data_path +
+                                       csv_file_name.format(c, itn))
+                train_data[c] = train_data[c].append(train_df,
+                                                     ignore_index=True)
+    else:
+        raise NameError(retrain_method)
             
     # Use the data in the next training iteration as the test data
     for c in range(num_client):
