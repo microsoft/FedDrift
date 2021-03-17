@@ -65,11 +65,16 @@ def generate_data_sine(train_iteration, num_client, drift_together):
 
     # Randomly generate change point for each client
     if drift_together == 1:
-        cp = np.random.random_sample() * train_iteration
+        #cp = np.random.random_sample() * train_iteration
+        cp = np.random.randint(1, train_iteration)
         change_point = [cp for c in range(num_client)]
     else:
-        change_point = [np.random.random_sample() * train_iteration
+        change_point = [np.random.randint(1, train_iteration)
                         for c in range(num_client)]
+
+    # Print change points
+    for idx, cp in enumerate(change_point):
+        print('Change point for client {} is {}'.format(idx, cp))
         
     # Generate data for each client/iteration
     train_data = [[] for t in range(train_iteration + 1)]
