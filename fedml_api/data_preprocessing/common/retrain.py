@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import pandas as pd
 
 def load_retrain_table_data(data_path, num_client, current_train_iteration,
@@ -47,6 +48,15 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
         for it in select_iter:
             itn = int(it)
             for c in range(num_client):
+                train_df = pd.read_csv(data_path +
+                                       csv_file_name.format(c, itn))
+                train_data[c] = train_data[c].append(train_df,
+                                                     ignore_index=True)
+    elif retrain_method.startswith("clientsel-"):
+        # Load data from specific iterations for each client
+        train_data_iter = retrain_method.replace("clientsel-", "")
+        for c in range(num_client):
+            for it in train_data_iter[c]:
                 train_df = pd.read_csv(data_path +
                                        csv_file_name.format(c, itn))
                 train_data[c] = train_data[c].append(train_df,

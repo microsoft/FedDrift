@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import torch
+import json
 
 # Loader function for AUE
 def AUE_data_loader(args, loader_func, device):
@@ -170,3 +171,138 @@ def DriftSurf_data_loader(args, loader_func, device):
         pickle.dump(ds_state, f)
             
     return datasets
+
+
+class MultiModelAccState:
+    def __init__(self, client_num, model_num=2, delta=0.1):
+        self.client_num = client_num
+        self.model_num = model_num
+        self.delta = delta
+        self.train_data_dict = dict()
+        for m in range(model_num):
+            # each item in the train_data_dict represents one model
+            # and its corresponding the training data (by client)
+            self.train_data_dict[m] = [[] for c in range(client_num)]            
+        self.models = dict()
+        self.test_model_idx = dict()
+        self.acc_dict = dict()        
+
+    def _score(self, model_key, test_data, device):
+        self.models[model_key].eval()
+        self.models[model_key].to(device)
+        test_acc = test_total = 0.
+        with torch.no_grad():
+            for batch_idx, (x, target) in enumerate(test_data):
+                x = x.to(device)
+                target = target.to(device)
+                pred = self.models[model_key](x)
+                _, predicted = torch.max(pred, -1)
+                correct = predicted.eq(target).sum()
+                test_acc += correct.item()
+                test_total += target.size(0)
+        return test_acc/test_total
+
+    def run_model_select(self, new_data_local_dict, device, curr_iter):
+        # Special case for iteration 0, every client contributes to 
+        # the first model
+        if curr_iter == 0:
+            for c in range(self.client_num):
+                self.train_data_dict[0][c].append(0)
+            return
+
+        # Check if all model slots are taken
+        next_free_model = -1
+        for m in range(self.model_num):
+            if m not in self.models:
+                next_free_model = m
+                break
+
+        # Make the model selection decision for each client
+        for c in range(self.client_num):
+            model_acc = dict()
+            for m in self.models.keys():
+                model_acc[m] = self._score(m, new_data_local_dict[c], device)
+            best_model = -1
+            best_acc = 0.
+            for m in model_acc.keys():
+                if model_acc[m] > best_acc:
+                    best_acc = model_acc[m]
+                    best_model = m
+            # If the best accuracy drops more than delta, contribute to a new
+            # model if it's still possible
+            if self.acc_dict[c] - best_acc > self.delta and \
+               next_free_model != -1:
+                best_model = next_free_model
+
+            self.train_data_dict[best_model][c].append(curr_iter)
+            self.test_model_idx[c] = best_model
+
+        # DEBUG
+        print('train data dict ==>')
+        print(self.train_data_dict)
+
+    def set_model(self, key, model):
+        self.models[key] = model
+
+    def set_acc(self, client, acc):
+        self.acc_dict[client] = acc
+
+    def move_model_to_cpu(self):
+        for key in self.models.keys():
+            if self.models[key] is not None:
+                self.models[key].cpu()
+
+    def get_train_data_by_model(self, key):
+        # Make sure there is data for this model
+        train_data = self.train_data_dict[key]
+        has_data = False
+        for dl in train_data:
+            if len(dl) > 0:
+                has_data = True
+                break
+        if not has_data:
+            return ''
+
+        return json.dumps(train_data)
+
+    def get_test_model_idx(self, client_idx):
+        return self.test_model_idx[client_idx]
+            
+                
+def MultiModelAcc_data_loader(args, loader_func, device):
+    datasets = []
+    # Hardcoded delta
+    deltas = {'sea': 0.04, 'sine': 0.20, 'circle': 0.10}
+    
+    if args.curr_train_iteration == 0:
+        mm_state = MultiModelAccState(args.client_num_in_total,
+                                      args.concept_num,
+                                      deltas[args.dataset])
+        mm_state.run_model_select(None, device,
+                                  args.curr_train_iteration)
+    else:
+        # Load the previous state and models
+        with open('mm_state.pkl', 'rb') as f:
+            mm_state = pickle.load(f)
+        
+        # Load the most recent batch of training data
+        args.retrain_data = 'win-1'
+        data_batch = loader_func(args)
+        [train_data_num, test_data_num, train_data_global, test_data_global,
+         train_data_local_num_dict, train_data_local_dict,
+         test_data_local_dict, class_num, feature_num] = data_batch
+        mm_state.run_model_select(train_data_local_dict, device,
+                                  args.curr_train_iteration)
+
+    # Load data by model
+    for m in range(args.concept_num):
+        train_data = mm_state.get_train_data_by_model(m)
+        if train_data != '':
+            print('Model {} training data = {}'.format(m, train_data))
+            args.retrain_data = 'clientsel-' + train_data
+            datasets.append(loader_func(args))
+    
+    # Save state
+    mm_state.move_model_to_cpu()
+    with open('mm_state.pkl','wb') as f:
+        pickle.dump(mm_state, f)
