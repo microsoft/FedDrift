@@ -208,6 +208,7 @@ class MultiModelAccState:
         if curr_iter == 0:
             for c in range(self.client_num):
                 self.train_data_dict[0][c].append(0)
+                self.test_model_idx[c] = 0
             return
 
         # Check if all model slots are taken
@@ -272,7 +273,7 @@ class MultiModelAccState:
 def MultiModelAcc_data_loader(args, loader_func, device):
     datasets = []
     # Hardcoded delta
-    deltas = {'sea': 0.04, 'sine': 0.20, 'circle': 0.10}
+    deltas = {'sea': 0.03, 'sine': 0.20, 'circle': 0.10}
     
     if args.curr_train_iteration == 0:
         mm_state = MultiModelAccState(args.client_num_in_total,
@@ -301,8 +302,10 @@ def MultiModelAcc_data_loader(args, loader_func, device):
             print('Model {} training data = {}'.format(m, train_data))
             args.retrain_data = 'clientsel-' + train_data
             datasets.append(loader_func(args))
-    
+
     # Save state
     mm_state.move_model_to_cpu()
     with open('mm_state.pkl','wb') as f:
         pickle.dump(mm_state, f)
+
+    return datasets

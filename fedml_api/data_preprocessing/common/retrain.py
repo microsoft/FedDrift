@@ -54,11 +54,11 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
                                                      ignore_index=True)
     elif retrain_method.startswith("clientsel-"):
         # Load data from specific iterations for each client
-        train_data_iter = retrain_method.replace("clientsel-", "")
+        train_data_iter = json.loads(retrain_method.replace("clientsel-", ""))
         for c in range(num_client):
             for it in train_data_iter[c]:
                 train_df = pd.read_csv(data_path +
-                                       csv_file_name.format(c, itn))
+                                       csv_file_name.format(c, it))
                 train_data[c] = train_data[c].append(train_df,
                                                      ignore_index=True)
     else:
@@ -73,3 +73,9 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
 
     return train_data, test_data
     
+def print_change_points(data_path):
+    # Print change points for debugging
+    with open(data_path + 'change_points', 'r') as cpf:
+        c = 0
+        for c, line in enumerate(cpf):
+            print('Client {} change point is {}'.format(c, line.strip()))

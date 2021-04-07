@@ -10,7 +10,7 @@ import torch.nn as nn
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
 from fedml_api.model.linear.lr import LogisticRegression
-from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data
+from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data, print_change_points
 
 def batch_data(data, batch_size):
     '''
@@ -91,6 +91,8 @@ def generate_data_sea(train_iteration, num_client, drift_together):
 def load_partition_data_sea(batch_size, current_train_iteration,
                             num_client, retrain_data):
     data_path = "./../../../data/sea/"
+
+    print_change_points(data_path)
 
     # Load the data from generated CSVs
     train_data, test_data = load_retrain_table_data(
