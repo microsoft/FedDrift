@@ -128,12 +128,12 @@ def load_partition_data_circle(batch_size, current_train_iteration,
         train_data_local_num_dict[c] = len(train_data[c].index)
 
         # transform to batches
-        if train_data_num > 0:
+        if len(train_data[c].index) > 0:
             train_batch = batch_data(train_data[c], batch_size)
             train_data_local_dict[c] = train_batch
             train_data_global += train_batch
-            
-        if test_data_num > 0:
+
+        if len(test_data[c].index) > 0:
             test_batch = batch_data(test_data[c], batch_size)        
             test_data_local_dict[c] = test_batch        
             test_data_global += test_batch
