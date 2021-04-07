@@ -10,7 +10,7 @@ import math
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
-from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data
+from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data, print_change_points
 
 def batch_data(data, batch_size):
     '''
@@ -109,6 +109,8 @@ def load_partition_data_sine(batch_size, current_train_iteration,
                              num_client, retrain_data):
     data_path = "./../../../data/sine/"
 
+    print_change_points(data_path)
+
     # Load the data from generated CSVs
     train_data, test_data = load_retrain_table_data(
         data_path, num_client, current_train_iteration,
@@ -129,12 +131,12 @@ def load_partition_data_sine(batch_size, current_train_iteration,
         train_data_local_num_dict[c] = len(train_data[c].index)
 
         # transform to batches
-        if train_data_num > 0:
+        if len(train_data[c].index) > 0:
             train_batch = batch_data(train_data[c], batch_size)
             train_data_local_dict[c] = train_batch
             train_data_global += train_batch
             
-        if test_data_num > 0:
+        if len(test_data[c].index) > 0:
             test_batch = batch_data(test_data[c], batch_size)        
             test_data_local_dict[c] = test_batch        
             test_data_global += test_batch
