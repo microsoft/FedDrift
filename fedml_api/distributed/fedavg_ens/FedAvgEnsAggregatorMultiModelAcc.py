@@ -48,6 +48,10 @@ class FedAvgEnsAggregatorMultiModelAcc(object):
         # Assign models to the ones that are being trained
         for idx in range(len(self.models)):
             mm_state.set_model(idx, self.models[idx])
+        # Print the test model index for debugging
+        for c in range(self.args.client_num_in_total):
+            test_idx = mm_state.get_test_model_idx(c)
+            print('Client {} test model is {}'.format(c, test_idx))
 
         return mm_state
 
@@ -133,10 +137,11 @@ class FedAvgEnsAggregatorMultiModelAcc(object):
             test_tot_corrects = []
             test_losses = []
             for client_idx in range(self.args.client_num_in_total):
+                train_model_idx = self.mm_state.get_train_model_idx(client_idx)
                 test_model_idx = self.mm_state.get_test_model_idx(client_idx)
                 # train data
-                train_tot_correct, train_num_sample, train_loss = self._infer(self.models[test_model_idx],
-                                                                              self.train_data_local_dicts[test_model_idx][client_idx])
+                train_tot_correct, train_num_sample, train_loss = self._infer(self.models[train_model_idx],
+                                                                              self.train_data_local_dicts[train_model_idx][client_idx])
                 train_tot_corrects.append(copy.deepcopy(train_tot_correct))
                 train_num_samples.append(copy.deepcopy(train_num_sample))
                 train_losses.append(copy.deepcopy(train_loss))

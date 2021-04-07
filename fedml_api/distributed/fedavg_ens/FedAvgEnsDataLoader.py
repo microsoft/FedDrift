@@ -187,6 +187,7 @@ class MultiModelAccState:
             # and its corresponding the training data (by client)
             self.train_data_dict[m] = [[] for c in range(client_num)]            
         self.models = dict()
+        self.train_model_idx = dict()
         self.test_model_idx = dict()
         self.acc_dict = dict()        
 
@@ -211,6 +212,7 @@ class MultiModelAccState:
         if curr_iter == 0:
             for c in range(self.client_num):
                 self.train_data_dict[0][c].append(0)
+                self.train_model_idx[c] = 0
                 self.test_model_idx[c] = 0
             return
 
@@ -239,6 +241,7 @@ class MultiModelAccState:
                 best_model = next_free_model
 
             self.train_data_dict[best_model][c].append(curr_iter)
+            self.train_model_idx[c] = best_model
             self.test_model_idx[c] = best_model
 
         # DEBUG
@@ -254,7 +257,33 @@ class MultiModelAccState:
             else:
                 best_model = 0            
             self.train_data_dict[best_model][c].append(curr_iter)
+            self.train_model_idx[c] = best_model
             self.test_model_idx[c] = best_model
+
+    def model_select_geniex(self, curr_iter, change_points):
+        # Only works for two models and one change point
+        # This one can predict which model for testing based on
+        # the oracle knowledge
+        min_cp = 1000000
+        for c in range(self.client_num):
+            if change_points[c] < min_cp:
+                min_cp = change_points[c]
+                
+        for c in range(self.client_num):
+            cp = change_points[c]
+            if curr_iter >= cp:
+                train_model = 1
+            else:
+                train_model = 0
+
+            if curr_iter >= (cp-1) and cp > min_cp:
+                test_model = 1
+            else:
+                test_model = train_model
+                
+            self.train_data_dict[train_model][c].append(curr_iter)
+            self.train_model_idx[c] = train_model
+            self.test_model_idx[c] = test_model
 
     def set_model(self, key, model):
         self.models[key] = model
@@ -282,6 +311,9 @@ class MultiModelAccState:
 
     def get_test_model_idx(self, client_idx):
         return self.test_model_idx[client_idx]
+
+    def get_train_model_idx(self, client_idx):
+        return self.train_model_idx[client_idx]
             
                 
 def MultiModelAcc_data_loader(args, loader_func, device, comm, process_id):
@@ -347,6 +379,45 @@ def MultiModelGeni_data_loader(args, loader_func, device, comm, process_id):
     
     mm_state.model_select_geni(args.curr_train_iteration,
                                change_points)
+
+    # Load data by model
+    for m in range(args.concept_num):
+        train_data = mm_state.get_train_data_by_model(m)
+        if train_data != '':
+            print('Model {} training data = {}'.format(m, train_data))
+            args.retrain_data = 'clientsel-' + train_data
+            datasets.append(loader_func(args))
+
+    # Save state
+    comm.Barrier()
+    if process_id == 0:
+        mm_state.move_model_to_cpu()
+        with open('mm_state.pkl','wb') as f:
+            pickle.dump(mm_state, f)
+    comm.Barrier()
+
+    return datasets
+
+
+def MultiModelGeniEx_data_loader(args, loader_func, device, comm, process_id):
+    datasets = []
+    # Load the change points
+    data_path = './../../../data/{}/'.format(args.dataset)
+    change_points = {}
+    with open(data_path + 'change_points', 'r') as cpf:
+        for c, line in enumerate(cpf):
+            change_points[c] = int(line.strip())
+            
+    if args.curr_train_iteration == 0:
+        mm_state = MultiModelAccState(args.client_num_in_total,
+                                      args.concept_num)
+    else:
+        # Load the previous state and models
+        with open('mm_state.pkl', 'rb') as f:
+            mm_state = pickle.load(f)        
+    
+    mm_state.model_select_geniex(args.curr_train_iteration,
+                                 change_points)
 
     # Load data by model
     for m in range(args.concept_num):
