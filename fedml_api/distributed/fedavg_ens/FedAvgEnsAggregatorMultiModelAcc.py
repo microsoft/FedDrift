@@ -44,7 +44,7 @@ class FedAvgEnsAggregatorMultiModelAcc(object):
     def init_mm_state(self):
         # Load the previous state and models
         with open('mm_state.pkl', 'rb') as f:
-            ds_state = pickle.load(f)
+            mm_state = pickle.load(f)
         # Assign models to the ones that are being trained
         for idx in range(len(self.models)):
             mm_state.set_model(idx, self.models[idx])
@@ -76,26 +76,32 @@ class FedAvgEnsAggregatorMultiModelAcc(object):
             model_list = []
             training_num = 0
 
+            worker_with_model = -1
             for idx in range(self.worker_num):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
-                if self.args.is_mobile == 1 and num_sample > 0:
+                if num_sample > 0:
+                    worker_with_model = idx
+                if self.args.is_mobile == 1:
                     model = transform_list_to_tensor(model)
+                
                 model_list.append((num_sample, model))
                 training_num += num_sample
 
             #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
             # logging.info("################aggregate: %d" % len(model_list))
-            (num0, averaged_params) = model_list[0]
+            (num0, averaged_params) = model_list[worker_with_model]
             for k in averaged_params.keys():
+                init = False
                 for i in range(0, len(model_list)):
                     local_sample_number, local_model_params = model_list[i]
                     # Skip the client that doesn't have data for this model
                     if local_sample_number == 0:
                         continue
                     w = local_sample_number / training_num
-                    if i == 0:
+                    if not init:                        
                         averaged_params[k] = local_model_params[k] * w
+                        init = True
                     else:
                         averaged_params[k] += local_model_params[k] * w
 
