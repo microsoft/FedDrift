@@ -319,7 +319,7 @@ class MultiModelAccState:
 def MultiModelAcc_data_loader(args, loader_func, device, comm, process_id):
     datasets = []
     # Hardcoded delta
-    deltas = {'sea': 0.03, 'sine': 0.20, 'circle': 0.10}
+    deltas = {'sea': 0.04, 'sine': 0.20, 'circle': 0.10}
     
     if args.curr_train_iteration == 0:
         mm_state = MultiModelAccState(args.client_num_in_total,
