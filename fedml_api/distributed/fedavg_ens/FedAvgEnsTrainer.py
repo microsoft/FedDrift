@@ -42,15 +42,20 @@ class FedAvgEnsTrainer(object):
         self.client_index = client_index
 
     def train(self):
-        results = []
+        results = {}
 
         for mod_idx, model in enumerate(self.models):
             model.to(self.device)
             # change to train mode
             model.train()
 
-            train_local = self.train_data_local_dicts[mod_idx][self.client_index]
             local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
+            # Skip the training if there is no training data for this model
+            if local_sample_number == 0:
+                results[mod_idx] = (None, 0)
+                continue
+
+            train_local = self.train_data_local_dicts[mod_idx][self.client_index]
             criterion = self.criterions[mod_idx]
             optimizer = self.optimizers[mod_idx]
 
@@ -76,6 +81,6 @@ class FedAvgEnsTrainer(object):
             # transform Tensor to list
             if self.args.is_mobile == 1:
                 weights = transform_tensor_to_list(weights)
-            results.append((weights, local_sample_number))
+            results[mod_idx] = (weights, local_sample_number)
             
         return results

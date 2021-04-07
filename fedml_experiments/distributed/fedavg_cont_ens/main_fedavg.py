@@ -102,6 +102,9 @@ def add_args(parser):
     parser.add_argument('--ensemble_window', type=int, default=5,
                         help='The number of models to keep in the ensemble')
 
+    parser.add_argument('--concept_num', type=int, default=2,
+                        help='The number of concepts in the experiments')
+
     args = parser.parse_args()
     return args
 
@@ -134,9 +137,6 @@ def load_data_by_dataset(args):
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
                class_num, feature_num]
     return dataset
-
-def load_data(args):
-    return 
 
 
 def create_model(args, model_name, output_dim, feature_dim):
