@@ -111,7 +111,7 @@ class FedAvgEnsAggregatorAuePc(object):
 
             for idx in range(self.worker_num):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
-                if self.args.is_mobile == 1:
+                if self.args.is_mobile == 1 and num_sample > 0:
                     model = transform_list_to_tensor(model)
                 model_list.append((num_sample, model))
                 training_num += num_sample
@@ -124,6 +124,9 @@ class FedAvgEnsAggregatorAuePc(object):
                 for i in range(0, len(model_list)):
                     local_sample_number, local_model_params = model_list[i]
                     w = local_sample_number / training_num
+                    # Skip the client that doesn't have data for this model
+                    if local_sample_number == 0:
+                        continue
                     if i == 0:
                         averaged_params[k] = local_model_params[k] * w
                     else:
