@@ -8,7 +8,7 @@ from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
 from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
 from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
 
-from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AUE_data_loader, DriftSurf_data_loader, MultiModelAcc_data_loader
+from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AUE_data_loader, DriftSurf_data_loader, MultiModelAcc_data_loader, MultiModelGeni_data_loader
 
 
 def FedML_init():
@@ -17,13 +17,18 @@ def FedML_init():
     worker_number = comm.Get_size()
     return comm, process_id, worker_number
 
-def FedML_FedAvgEns_data_loader(args, loader_func, device):
+def FedML_FedAvgEns_data_loader(args, loader_func, device, comm, process_id):
     if args.concept_drift_algo in {"aue", "auepc"}:
         return AUE_data_loader(args, loader_func, device)
     elif args.concept_drift_algo == "driftsurf":
-        return DriftSurf_data_loader(args, loader_func, device)
+        return DriftSurf_data_loader(args, loader_func, device,
+                                     comm, process_id)
     elif args.concept_drift_algo == "mmacc":
-        return MultiModelAcc_data_loader(args, loader_func, device)
+        return MultiModelAcc_data_loader(args, loader_func, device,
+                                         comm, process_id)
+    elif args.concept_drift_algo == "mmgeni":
+        return MultiModelGeni_data_loader(args, loader_func, device,
+                                          comm, process_id)
 
 
 def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
@@ -74,7 +79,7 @@ def init_server(args, device, comm, rank, size, models, train_data_nums, train_d
         aggregator = FedAvgEnsAggregatorDriftSurf(train_data_globals, test_data_globals, train_data_nums,
                                                   train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
                                                   device, models, class_num, args)
-    elif args.concept_drift_algo == "mmacc":
+    elif args.concept_drift_algo in {"mmacc", "mmgeni"}:
         aggregator = FedAvgEnsAggregatorMultiModelAcc(train_data_globals, test_data_globals, train_data_nums,
                                                       train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
                                                       device, models, class_num, args)

@@ -134,7 +134,7 @@ class DriftSurfState:
         print(self.model_key)
         
 # Loader function for DriftSurf
-def DriftSurf_data_loader(args, loader_func, device):
+def DriftSurf_data_loader(args, loader_func, device, comm, process_id):
     
     datasets = []
     if args.curr_train_iteration == 0:
@@ -166,9 +166,12 @@ def DriftSurf_data_loader(args, loader_func, device):
             datasets.append(loader_func(args))
 
     # Save state
-    ds_state.move_model_to_cpu()
-    with open('ds_state.pkl','wb') as f:
-        pickle.dump(ds_state, f)
+    comm.Barrier()
+    if process_id == 0:
+        ds_state.move_model_to_cpu()
+        with open('ds_state.pkl','wb') as f:
+            pickle.dump(ds_state, f)
+    comm.Barrier()
             
     return datasets
 
@@ -242,6 +245,17 @@ class MultiModelAccState:
         print('train data dict ==>')
         print(self.train_data_dict)
 
+    def model_select_geni(self, curr_iter, change_points):
+        # Only works for two models and one change point
+        for c in range(self.client_num):
+            cp = change_points[c]
+            if curr_iter >= cp:
+                best_model = 1
+            else:
+                best_model = 0            
+            self.train_data_dict[best_model][c].append(curr_iter)
+            self.test_model_idx[c] = best_model
+
     def set_model(self, key, model):
         self.models[key] = model
 
@@ -270,7 +284,7 @@ class MultiModelAccState:
         return self.test_model_idx[client_idx]
             
                 
-def MultiModelAcc_data_loader(args, loader_func, device):
+def MultiModelAcc_data_loader(args, loader_func, device, comm, process_id):
     datasets = []
     # Hardcoded delta
     deltas = {'sea': 0.03, 'sine': 0.20, 'circle': 0.10}
@@ -304,8 +318,50 @@ def MultiModelAcc_data_loader(args, loader_func, device):
             datasets.append(loader_func(args))
 
     # Save state
-    mm_state.move_model_to_cpu()
-    with open('mm_state.pkl','wb') as f:
-        pickle.dump(mm_state, f)
+    comm.Barrier()
+    if process_id == 0:
+        mm_state.move_model_to_cpu()
+        with open('mm_state.pkl','wb') as f:
+            pickle.dump(mm_state, f)
+    comm.Barrier()
+
+    return datasets
+
+
+def MultiModelGeni_data_loader(args, loader_func, device, comm, process_id):
+    datasets = []
+    # Load the change points
+    data_path = './../../../data/{}/'.format(args.dataset)
+    change_points = {}
+    with open(data_path + 'change_points', 'r') as cpf:
+        for c, line in enumerate(cpf):
+            change_points[c] = int(line.strip())
+            
+    if args.curr_train_iteration == 0:
+        mm_state = MultiModelAccState(args.client_num_in_total,
+                                      args.concept_num)
+    else:
+        # Load the previous state and models
+        with open('mm_state.pkl', 'rb') as f:
+            mm_state = pickle.load(f)        
+    
+    mm_state.model_select_geni(args.curr_train_iteration,
+                               change_points)
+
+    # Load data by model
+    for m in range(args.concept_num):
+        train_data = mm_state.get_train_data_by_model(m)
+        if train_data != '':
+            print('Model {} training data = {}'.format(m, train_data))
+            args.retrain_data = 'clientsel-' + train_data
+            datasets.append(loader_func(args))
+
+    # Save state
+    comm.Barrier()
+    if process_id == 0:
+        mm_state.move_model_to_cpu()
+        with open('mm_state.pkl','wb') as f:
+            pickle.dump(mm_state, f)
+    comm.Barrier()
 
     return datasets
