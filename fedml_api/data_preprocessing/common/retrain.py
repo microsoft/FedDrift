@@ -76,6 +76,5 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
 def print_change_points(data_path):
     # Print change points for debugging
     with open(data_path + 'change_points', 'r') as cpf:
-        c = 0
         for c, line in enumerate(cpf):
             print('Client {} change point is {}'.format(c, line.strip()))

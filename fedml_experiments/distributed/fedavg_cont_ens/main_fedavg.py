@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     # load data
     datasets = FedML_FedAvgEns_data_loader(args, load_data_by_dataset,
-                                           device)
+                                           device, comm, process_id)
     #dataset = load_data(args)
     #[train_data_num, test_data_num, train_data_global, test_data_global,
     # train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
