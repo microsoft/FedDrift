@@ -43,6 +43,9 @@ def add_args(parser):
 
     parser.add_argument('--drift_together', type=int, default=0,
                         help='If the concept drift happens at the same time across all clients')
+
+    parser.add_argument('--change_points', type=str, default='',
+                        help='Specify change points (separates by commas)')
     
     args = parser.parse_args()
     return args
@@ -52,17 +55,17 @@ def prepare_data(args, dataset_name):
     logging.info("generate_data. dataset_name = %s" % dataset_name)
     if dataset_name == "sea":
         generate_data_sea(args.train_iteration, args.client_num_in_total,
-                          args.drift_together)
+                          args.drift_together, args.change_points)
 
     elif dataset_name == "sine":
         logging.info("generate_data. dataset_name = %s" % dataset_name)
         generate_data_sine(args.train_iteration, args.client_num_in_total,
-                           args.drift_together)
+                           args.drift_together, args.change_points)
 
     elif dataset_name == "circle":
         logging.info("generate_data. dataset_name = %s" % dataset_name)
         generate_data_circle(args.train_iteration, args.client_num_in_total,
-                             args.drift_together)
+                             args.drift_together, args.change_points)
         
     return
 

@@ -105,6 +105,9 @@ def add_args(parser):
     parser.add_argument('--concept_num', type=int, default=2,
                         help='The number of concepts in the experiments')
 
+    parser.add_argument('--change_points', type=str, default='',
+                        help='Specify change points (separates by commas)')
+
     args = parser.parse_args()
     return args
 
