@@ -43,7 +43,8 @@ def generate_circle_sample(num_sample, default_concept):
 
     return np.concatenate((data_x, np.expand_dims(data_y, axis=1)), axis=1)
 
-def generate_data_circle(train_iteration, num_client, drift_together):
+def generate_data_circle(train_iteration, num_client, drift_together,
+                         change_point_str):
 
     data_path = "./../../../data/circle/"
 
@@ -61,13 +62,16 @@ def generate_data_circle(train_iteration, num_client, drift_together):
     sample_per_client_iter = 500
 
     # Randomly generate change point for each client
-    if drift_together == 1:
-        #cp = np.random.random_sample() * train_iteration
-        cp = np.random.randint(1, train_iteration)
-        change_point = [cp for c in range(num_client)]
+    if change_point_str == '':
+        if drift_together == 1:
+            #cp = np.random.random_sample() * train_iteration
+            cp = np.random.randint(1, train_iteration)
+            change_point = [cp for c in range(num_client)]
+        else:
+            change_point = [np.random.randint(1, train_iteration)
+                            for c in range(num_client)]
     else:
-        change_point = [np.random.randint(1, train_iteration)
-                        for c in range(num_client)]
+        change_point = json.loads(change_point_str)
 
     # Print change points
     for idx, cp in enumerate(change_point):
