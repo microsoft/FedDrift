@@ -16,6 +16,7 @@ CI=${13}
 TRAIN_ITER=${14}
 DRIFT_TOGETHER=${15}
 CL_ALGO=${16}
+CHANGE_POINTS=${17}
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -32,7 +33,8 @@ python3 ./prepare_data.py \
   --client_num_per_round $WORKER_NUM \
   --batch_size $BATCH_SIZE \
   --train_iteration $TRAIN_ITER \
-  --drift_together $DRIFT_TOGETHER
+  --drift_together $DRIFT_TOGETHER \
+  --change_points $CHANGE_POINTS
 
 # Execute the training for one iteration at a time
 # We do this because the FedML framework calls MPI_Abort whenever
@@ -61,6 +63,7 @@ do
            --drift_together $DRIFT_TOGETHER \
            --report_client 1 \
            --retrain_data win-1 \
-           --concept_drift_algo $CL_ALGO
+           --concept_drift_algo $CL_ALGO \
+           --change_points $CHANGE_POINTS
 done
 

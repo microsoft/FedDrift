@@ -34,7 +34,8 @@ def batch_data(data, batch_size):
         batch_data.append((batched_x, batched_y))
     return batch_data
 
-def generate_data_sea(train_iteration, num_client, drift_together):
+def generate_data_sea(train_iteration, num_client, drift_together,
+                      change_point_str):
 
     data_path = "./../../../data/sea/"
 
@@ -48,13 +49,16 @@ def generate_data_sea(train_iteration, num_client, drift_together):
     df_con2 = pd.read_csv(data_path + 'concept2.csv')
 
     # Randomly generate change point for each client
-    if drift_together == 1:
-        #cp = np.random.random_sample() * train_iteration
-        cp = np.random.randint(1, train_iteration)
-        change_point = [cp for c in range(num_client)]
+    if change_point_str == '':
+        if drift_together == 1:
+            #cp = np.random.random_sample() * train_iteration
+            cp = np.random.randint(1, train_iteration)
+            change_point = [cp for c in range(num_client)]
+        else:
+            change_point = [np.random.randint(1, train_iteration)
+                            for c in range(num_client)]
     else:
-        change_point = [np.random.randint(1, train_iteration)
-                        for c in range(num_client)]
+        change_point = json.loads(change_point_str)
 
     # Print change points
     for idx, cp in enumerate(change_point):
