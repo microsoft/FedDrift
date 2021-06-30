@@ -99,6 +99,9 @@ def add_args(parser):
     parser.add_argument('--concept_drift_algo', type=str, default='aue',
                         help='The algorithm to handle concept drift')
 
+    parser.add_argument('--concept_drift_algo_arg', type=str, default='',
+                        help='The parameter for concept drift algorithm')
+
     parser.add_argument('--ensemble_window', type=int, default=5,
                         help='The number of models to keep in the ensemble')
 

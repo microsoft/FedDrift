@@ -68,7 +68,7 @@ class FedAvgEnsServerManager(ServerManager):
         message = Message(MyMessage.MSG_TYPE_S2C_INIT_CONFIG, self.get_sender_id(), receive_id)
         message.add_params(MyMessage.MSG_ARG_KEY_MODEL_PARAMS, global_model_params)
         message.add_params(MyMessage.MSG_ARG_KEY_CLIENT_INDEX, str(client_index))
-        message.add_params(MyMessage.MSG_ARG_KEY_EXTRA_INFO, str(extra_info))
+        message.add_params(MyMessage.MSG_ARG_KEY_EXTRA_INFO, extra_info)
         self.send_message(message)
 
     def send_message_sync_model_to_client(self, receive_id, global_model_params, client_index, extra_info):
@@ -76,5 +76,5 @@ class FedAvgEnsServerManager(ServerManager):
         message = Message(MyMessage.MSG_TYPE_S2C_SYNC_MODEL_TO_CLIENT, self.get_sender_id(), receive_id)
         message.add_params(MyMessage.MSG_ARG_KEY_MODEL_PARAMS, global_model_params)
         message.add_params(MyMessage.MSG_ARG_KEY_CLIENT_INDEX, str(client_index))
-        message.add_params(MyMessage.MSG_ARG_KEY_EXTRA_INFO, str(extra_info))
+        message.add_params(MyMessage.MSG_ARG_KEY_EXTRA_INFO, extra_info)
         self.send_message(message)
