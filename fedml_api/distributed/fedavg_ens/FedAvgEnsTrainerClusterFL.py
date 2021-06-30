@@ -2,6 +2,7 @@ import logging
 
 import torch
 from torch import nn
+import numpy as np
 
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list, transform_list_to_tensor
 
@@ -53,9 +54,8 @@ class FedAvgEnsTrainerClusterFL(object):
             local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
             # Skip the training if there is no training data for this model, or the cluster id
             # doesn't match with the model index
-            cluster_id = np.argwhere(self.extra_info ==
-                                     self.client_index).flatten()[0]
-            if local_sample_number == 0 or cluter_id != mod_idx:
+            cluster_id = self.extra_info[self.client_index]
+            if local_sample_number == 0 or cluster_id != mod_idx:
                 results[mod_idx] = (None, 0)
                 continue
 
