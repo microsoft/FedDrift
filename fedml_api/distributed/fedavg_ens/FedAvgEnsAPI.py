@@ -4,11 +4,13 @@ from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAue import FedAvgEnsAgg
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAuePc import FedAvgEnsAggregatorAuePc
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorDriftSurf import FedAvgEnsAggregatorDriftSurf
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorMultiModelAcc import FedAvgEnsAggregatorMultiModelAcc
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorClusterFL import FedAvgEnsAggregatorClusterFL
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
+from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerClusterFL import FedAvgEnsTrainerClusterFL
 from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
 from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
 
-from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AUE_data_loader, DriftSurf_data_loader, MultiModelAcc_data_loader, MultiModelGeni_data_loader, MultiModelGeniEx_data_loader
+from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AUE_data_loader, DriftSurf_data_loader, MultiModelAcc_data_loader, MultiModelGeni_data_loader, MultiModelGeniEx_data_loader, ClusterFL_data_loader
 
 
 def FedML_init():
@@ -32,6 +34,9 @@ def FedML_FedAvgEns_data_loader(args, loader_func, device, comm, process_id):
     elif args.concept_drift_algo == "mmgeniex":
         return MultiModelGeniEx_data_loader(args, loader_func, device,
                                             comm, process_id)
+    elif args.concept_drift_algo == "clusterfl":
+        return ClusterFL_data_loader(args, loader_func, device,
+                                     comm, process_id)
 
 
 def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
@@ -86,6 +91,10 @@ def init_server(args, device, comm, rank, size, models, train_data_nums, train_d
         aggregator = FedAvgEnsAggregatorMultiModelAcc(train_data_globals, test_data_globals, train_data_nums,
                                                       train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
                                                       device, models, class_num, args)
+    elif args.concept_drift_algo == "clusterfl":
+        aggregator = FedAvgEnsAggregatorClusterFL(train_data_globals, test_data_globals, train_data_nums,
+                                                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                                  device, models, class_num, args)
     else:
         raise NameError('concept_drift_algo')
 
@@ -101,7 +110,12 @@ def init_server(args, device, comm, rank, size, models, train_data_nums, train_d
 def init_client(args, device, comm, process_id, size, models, train_data_nums, train_data_local_num_dicts, train_data_local_dicts):
     # trainer
     client_index = process_id - 1
-    trainer = FedAvgEnsTrainer(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, device, models, args)
+    if args.concept_drift_algo == "clusterfl":
+        trainer = FedAvgEnsTrainerClusterFL(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums,
+                                            device, models, args)
+    else:
+        trainer = FedAvgEnsTrainer(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums,
+                                   device, models, args)
 
     client_manager = FedAvgEnsClientManager(args, trainer, comm, process_id, size)
     client_manager.run()

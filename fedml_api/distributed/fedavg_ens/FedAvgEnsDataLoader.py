@@ -436,3 +436,15 @@ def MultiModelGeniEx_data_loader(args, loader_func, device, comm, process_id):
     comm.Barrier()
 
     return datasets
+
+def ClusterFL_data_loader(args, loader_func, device, comm, process_id):
+    datasets = []
+
+    model_num = 2  # Hardcoded 2 models for now
+    for m in range(model_num):
+        # basic baseline, use all data for clustering
+        #args.retrain_data = 'all'
+        args.retrain_data = 'win-1'  # Debug, only use 1 window
+        datasets.append(loader_func(args))
+    
+    return datasets
