@@ -6,7 +6,7 @@ from torch import nn
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list, transform_list_to_tensor
 
 
-class FedAvgEnsTrainer(object):
+class FedAvgEnsTrainerClusterFL(object):
     def __init__(self, client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, device, models,
                  args):
         self.client_index = client_index
@@ -51,8 +51,11 @@ class FedAvgEnsTrainer(object):
             model.train()
 
             local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
-            # Skip the training if there is no training data for this model
-            if local_sample_number == 0:
+            # Skip the training if there is no training data for this model, or the cluster id
+            # doesn't match with the model index
+            cluster_id = np.argwhere(self.extra_info ==
+                                     self.client_index).flatten()[0]
+            if local_sample_number == 0 or cluter_id != mod_idx:
                 results[mod_idx] = (None, 0)
                 continue
 
