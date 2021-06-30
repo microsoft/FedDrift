@@ -20,4 +20,6 @@ class MyMessage(object):
     MSG_ARG_KEY_MODEL_PARAMS = "model_params"
     MSG_ARG_KEY_CLIENT_INDEX = "client_idx"
     MSG_ARG_KEY_MODEL_AND_NUM_SAMPLES = "model_and_num_samples"
+    MSG_ARG_KEY_EXTRA_INFO = "extra_info"
+    
 

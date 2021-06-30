@@ -24,8 +24,9 @@ class FedAvgEnsClientManager(ClientManager):
     def handle_message_init(self, msg_params):
         global_model_params = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_PARAMS)
         client_index = msg_params.get(MyMessage.MSG_ARG_KEY_CLIENT_INDEX)
+        extra_info = msg_params.get(MyMessage.MSG_ARG_KEY_EXTRA_INFO)
 
-        self.trainer.update_model(global_model_params)
+        self.trainer.update_model(global_model_params, extra_info)
         self.trainer.update_dataset(int(client_index))
         self.round_idx = 0
         self.__train()
@@ -38,8 +39,9 @@ class FedAvgEnsClientManager(ClientManager):
         logging.info("handle_message_receive_model_from_server.")
         model_params = msg_params.get(MyMessage.MSG_ARG_KEY_MODEL_PARAMS)
         client_index = msg_params.get(MyMessage.MSG_ARG_KEY_CLIENT_INDEX)
+        extra_info = msg_params.get(MyMessage.MSG_ARG_KEY_EXTRA_INFO)
 
-        self.trainer.update_model(model_params)
+        self.trainer.update_model(model_params, extra_info)
         self.trainer.update_dataset(int(client_index))
         self.round_idx += 1
         self.__train()
