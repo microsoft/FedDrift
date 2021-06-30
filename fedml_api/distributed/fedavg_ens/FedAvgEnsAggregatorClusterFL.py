@@ -35,6 +35,7 @@ class FedAvgEnsAggregatorClusterFL(object):
         self.models = self.init_model(models)
         self.is_split = False
         self.cluster_indices = [np.arange(self.args.client_num_in_total)]
+        self.cluster_assignment = [0 for i in range(self.args.client_num_in_total)]
         self.max_eps_1 = 0
         self.EPS_1 = 0
         self.EPS_2 = 10000
@@ -72,7 +73,7 @@ class FedAvgEnsAggregatorClusterFL(object):
                 if num_sample <= 0:
                     continue
                 # Load the original model
-                old_model = self.models[m_idx].state_dict()
+                old_model = self.models[m_idx].cpu().state_dict()
                 diff = dict()
                 for k in old_model.keys():
                     diff[k] = model[k] - old_model[k]
@@ -91,7 +92,7 @@ class FedAvgEnsAggregatorClusterFL(object):
     
     def compute_mean_update_norm(self, weight_updates):
         # TODO: Consider the sample size when doing the averaging
-        return np.norm(np.mean(np.stack([flatten(dW) for dW in weight_updates]), axis=0))
+        return np.linalg.norm(np.mean(np.stack([self.flatten(dW) for dW in weight_updates]), axis=0))
 
     def compute_pairwise_similarities(self, weight_updates):
         angles = np.zeros((len(weight_updates), len(weight_updates)))
@@ -99,7 +100,7 @@ class FedAvgEnsAggregatorClusterFL(object):
             for j, source2 in enumerate(weight_updates):
                 s1 = self.flatten(source1)
                 s2 = self.flatten(source2)
-                angles[i,j] = np.dot(s1,s2)/(np.norm(s1)*np.norm(s2)+1e-12)
+                angles[i,j] = np.dot(s1,s2)/(np.linalg.norm(s1)*np.linalg.norm(s2)+1e-12)
 
         return angles
 
@@ -118,43 +119,52 @@ class FedAvgEnsAggregatorClusterFL(object):
             weight_updates = self.compute_weight_update()
             max_norm = self.compute_max_update_norm(weight_updates)
             mean_norm = self.compute_mean_update_norm(weight_updates)
+            wandb.log({"Max_Norm": max_norm, "round": round_idx})
+            wandb.log({"Mean_Norm": mean_norm, "round": round_idx})
             mean_norm_increase = False
             if mean_norm > self.max_eps_1:
                 self.max_eps_1 = mean_norm
                 mean_norm_increase = True
                 # Set EPS_1 as 1/10 of the max mean norm
                 self.EPS_1 = self.max_eps_1/10.0
-                # Set EPS_2 as 4 * EPS_1
-                self.EPS_2 = 4 * FedAvgEnsAggregatorClusterFL.EPS_1
-                logging.info("Set EPS_1 = {}, EPS_2 = {}".format(self.EPS_1, self.EPS_2))
+                # Set EPS_2 as 6 * EPS_1
+                self.EPS_2 = 6 * self.EPS_1
+                logging.info("Round {}, Set EPS_1 = {}, EPS_2 = {}".format(
+                    round_idx, self.EPS_1, self.EPS_2))
             if mean_norm < self.EPS_1 and max_norm > self.EPS_2 and \
                round_idx > 100 and (not mean_norm_increase):
                 similarities = self.compute_pairwise_similarities(weight_updates)
                 c1, c2 = self.cluster_clients(similarities)
                 self.cluster_indices = [c1, c2]
-                logging.info("splitting clusters at round {}".format(round_idx))
-                logging.info(self.cluster_indices)
+                for cl_idx, cl in enumerate(self.cluster_indices):
+                    for cc in cl:
+                        self.cluster_assignment[cc] = cl_idx
+                self.is_split = True
+                print("splitting clusters at round {}".format(round_idx))
+                print(self.cluster_indices)
+                print(self.cluster_assignment)
 
         # Do aggregate for all models one by one
         for m_idx in range(len(self.models)):
             model_list = []
             training_num = 0
 
-            if m_idx > len(self.cluster_indices):
+            if m_idx >= len(self.cluster_indices):
                 # Stop aggregating if the number of models is larger than
                 # the number of clusters
                 break
-            for c_index in self.cluster_indices[m_idx]:
+            for c_idx in self.cluster_indices[m_idx]:
                 # Find the contribution of this client (may not match the
                 # the model index because the clustering changes)
                 for mm in range(len(self.models)):
                     model, num_sample = self.weights_and_num_samples_dict[c_idx][mm]
-                if num_sample <= 0:
-                    continue
-                if self.args.is_mobile == 1:
-                    model = transform_list_to_tensor(model)
-                model_list.append((num_sample, model))
-                training_num += num_sample
+                    if num_sample <= 0:
+                        continue
+                    if self.args.is_mobile == 1:
+                        model = transform_list_to_tensor(model)
+                    model_list.append((num_sample, model))
+                    training_num += num_sample
+                    break
                 
             # logging.info("################aggregate: %d" % len(model_list))
             (num0, averaged_params) = model_list[0]
@@ -187,7 +197,7 @@ class FedAvgEnsAggregatorClusterFL(object):
         return client_indexes
 
     def extra_info(self, round_idx):
-        return self.cluster_indices
+        return self.cluster_assignment
 
     def test_on_all_clients(self, round_idx):
         if round_idx % self.args.frequency_of_the_test == 0 or round_idx == self.args.comm_round - 1:
@@ -200,7 +210,7 @@ class FedAvgEnsAggregatorClusterFL(object):
             test_tot_corrects = []
             test_losses = []
             for client_idx in range(self.args.client_num_in_total):
-                train_model_idx = test_model_idx = np.argwhere(self.cluster_indices == client_idx).flatten()[0]
+                train_model_idx = test_model_idx = self.cluster_assignment[client_idx]
                 # train data
                 train_tot_correct, train_num_sample, train_loss = self._infer(self.models[train_model_idx],
                                                                               self.train_data_local_dicts[train_model_idx][client_idx])
