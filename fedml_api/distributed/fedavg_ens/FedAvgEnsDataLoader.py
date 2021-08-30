@@ -2,6 +2,9 @@ import numpy as np
 import pickle
 import torch
 import json
+from scipy.special import softmax
+from sklearn.mixture import GaussianMixture
+import logging
 
 # Loader function for AUE
 def AUE_data_loader(args, loader_func, device):
@@ -445,4 +448,262 @@ def ClusterFL_data_loader(args, loader_func, device, comm, process_id):
         args.retrain_data = args.concept_drift_algo_arg
         datasets.append(loader_func(args))
     
+    return datasets
+    
+class SoftClusterState:
+    def __init__(self, client_num, model_num=2, delta=0.1):
+        self.client_num = client_num
+        self.model_num = model_num
+        self.delta = delta
+        self.train_data_weights = np.zeros((self.model_num, self.client_num))
+        self.models = dict()
+        self.test_model_idx = dict()
+        self.acc_dict = dict()
+
+    def _score(self, model_key, test_data, device):
+        self.models[model_key].eval()
+        self.models[model_key].to(device)
+        test_acc = test_total = 0.
+        with torch.no_grad():
+            for batch_idx, (x, target) in enumerate(test_data):
+                x = x.to(device)
+                target = target.to(device)
+                pred = self.models[model_key](x)
+                _, predicted = torch.max(pred, -1)
+                correct = predicted.eq(target).sum()
+                test_acc += correct.item()
+                test_total += target.size(0)
+        return test_acc/test_total
+        
+    # Special case for iteration 0, every client contributes to 
+    # the first model
+    def cluster_init_iter(self):
+        for c in range(self.client_num):
+            self.train_data_weights[0][c] = 1.
+            self.test_model_idx[c] = 0
+        return
+        
+    # assign unit weights, replicating mmacc
+    def cluster_hard(self, new_data_local_dict, device, curr_iter):
+        # Clustering occurs only among models already initialized        
+        last_model_in_use = -1
+        for m in reversed(range(self.model_num)):
+            if any( self.train_data_weights[m] > 0 ):
+                last_model_in_use = m
+                break
+        models_used = last_model_in_use + 1
+        if models_used == self.model_num:
+            next_free_model = -1
+        else:
+            next_free_model = last_model_in_use + 1
+        
+        # Reset any existing weights from previous iters
+        self.train_data_weights = np.zeros((self.model_num, self.client_num))
+
+        # Make the model selection decision for each client
+        for c in range(self.client_num):
+            model_acc = dict()
+            for m in range(models_used):
+                model_acc[m] = self._score(m, new_data_local_dict[c], device)
+            best_model = -1
+            best_acc = 0.
+            for m in model_acc.keys():
+                if model_acc[m] > best_acc:
+                    best_acc = model_acc[m]
+                    best_model = m
+            # If the best accuracy drops more than delta, contribute to a new
+            # model if it's still possible
+            if self.acc_dict[c] - best_acc > self.delta and \
+               next_free_model != -1:
+                best_model = next_free_model
+                
+            self.train_data_weights[best_model][c] = 1.
+            self.test_model_idx[c] = best_model
+            
+    # use accuracy degradation to trigger model creation
+    def cluster_softmax_degrade(self, new_data_local_dict, device, curr_iter, alpha=0):  
+        # Clustering occurs only among models already initialized        
+        last_model_in_use = -1
+        for m in reversed(range(self.model_num)):
+            if any( self.train_data_weights[m] > 0 ):
+                last_model_in_use = m
+                break
+        models_used = last_model_in_use + 1
+        if models_used == self.model_num:
+            next_free_model = -1
+        else:
+            next_free_model = last_model_in_use + 1
+        
+        # Reset any existing weights from previous iters
+        self.train_data_weights = np.zeros((self.model_num, self.client_num))
+
+        # Make the model selection decision for each client
+        for c in range(self.client_num):
+            model_acc = dict()
+            for m in range(models_used):
+                model_acc[m] = self._score(m, new_data_local_dict[c], device)
+            best_model = -1
+            best_acc = 0.
+            for m in model_acc.keys():
+                if model_acc[m] > best_acc:
+                    best_acc = model_acc[m]
+                    best_model = m
+            # If the best accuracy drops more than delta, contribute to a new
+            # model if it's still possible
+            if self.acc_dict[c] - best_acc > self.delta and \
+               next_free_model != -1:
+                # initial error assumption
+                model_acc[next_free_model] = 0.5
+                if model_acc[next_free_model] > best_acc:
+                    best_model = next_free_model
+            
+            w = softmax([model_acc[m]*(2**alpha) for m in model_acc.keys()])
+            for m in model_acc.keys():
+                self.train_data_weights[m][c] = w[m]
+        
+            self.test_model_idx[c] = best_model
+        
+    # all self.model_num are available starting at iter 1
+    def cluster_softmax_all(self, new_data_local_dict, device, curr_iter, alpha=0):  
+        # Reset any existing weights from previous iters
+        self.train_data_weights = np.zeros((self.model_num, self.client_num))
+
+        # Make the model selection decision for each client
+        for c in range(self.client_num):
+            model_acc = dict()
+            for m in range(self.model_num):
+                model_acc[m] = self._score(m, new_data_local_dict[c], device)
+            best_model = -1
+            best_acc = 0.
+            for m in model_acc.keys():
+                if model_acc[m] > best_acc:
+                    best_acc = model_acc[m]
+                    best_model = m
+            
+            w = softmax([model_acc[m]*(2**alpha) for m in model_acc.keys()])
+            for m in model_acc.keys():
+                self.train_data_weights[m][c] = w[m]
+        
+            self.test_model_idx[c] = best_model
+            
+    def cluster_gmm(self, new_data_local_dict, device, curr_iter):
+        acc = np.zeros((self.model_num, self.client_num))
+        for m in range(self.model_num):
+            for c in range(self.client_num):
+                acc[m][c] = self._score(m, new_data_local_dict[c], device)
+        
+        # weight calculation as a function of acc
+        gm = GaussianMixture(n_components=2, random_state=0).fit(acc.transpose())
+        probs = gm.predict_proba(acc.transpose()).transpose()
+        # heuristic for mapping cluster to model id
+        if gm.means_[0][0] > gm.means_[0][1]:
+            self.train_data_weights[0] = probs[0]
+            self.train_data_weights[1] = probs[1]
+        else:
+            self.train_data_weights[0] = probs[1]
+            self.train_data_weights[1] = probs[0]
+            
+        for c in range(self.client_num):
+            best_model = np.argmax(self.train_data_weights[:,c])
+            self.test_model_idx[c] = best_model
+     
+    # replicate mmgeni
+    def cluster_geni(self, curr_iter, change_points):
+        # Reset any existing weights from previous iters
+        self.train_data_weights = np.zeros((self.model_num, self.client_num))
+            
+        for c in range(self.client_num):
+            cp = change_points[c]
+            if curr_iter >= cp:
+                best_model = 1
+            else:
+                best_model = 0
+            self.train_data_weights[best_model][c] = 1.
+            self.test_model_idx[c] = best_model
+        return
+
+    def set_model(self, key, model):
+        self.models[key] = model
+
+    def set_acc(self, client, acc):
+        self.acc_dict[client] = acc
+
+    def move_model_to_cpu(self):
+        for key in self.models.keys():
+            if self.models[key] is not None:
+                self.models[key].cpu()
+
+    def get_test_model_idx(self, client_idx):
+        return self.test_model_idx[client_idx]
+
+    def get_train_model_weights(self, key, client_idx):
+        return self.train_data_weights[key][client_idx]
+    
+def SoftCluster_data_loader(args, loader_func, device, comm, process_id):
+    datasets = []
+    # Hardcoded delta
+    deltas = {'sea': 0.04, 'sine': 0.20, 'circle': 0.10}
+    
+    if args.curr_train_iteration == 0:
+        sc_state = SoftClusterState(args.client_num_in_total,
+                                    args.concept_num,
+                                    deltas[args.dataset])
+        sc_state.cluster_init_iter()
+    else:
+        # Load the previous state and models
+        with open('sc_state.pkl', 'rb') as f:
+            sc_state = pickle.load(f)
+        
+        # Load the most recent batch of training data
+        args.retrain_data = 'win-1'
+        data_batch = loader_func(args)
+        [train_data_num, test_data_num, train_data_global, test_data_global,
+         train_data_local_num_dict, train_data_local_dict,
+         test_data_local_dict, class_num, feature_num] = data_batch
+         
+        # Run the appropriate clustering alg
+        clustering_alg = args.concept_drift_algo_arg
+
+        if clustering_alg == "hard":
+            sc_state.cluster_hard(train_data_local_dict, device,
+                                  args.curr_train_iteration)
+        elif clustering_alg == 'softmax_degrade':
+            sc_state.cluster_softmax_degrade(train_data_local_dict, device,
+                                             args.curr_train_iteration)
+        elif clustering_alg == 'softmax_all':
+            sc_state.cluster_softmax_all(train_data_local_dict, device,
+                                         args.curr_train_iteration)
+        elif 'softmax_d' in clustering_alg:
+            alpha = int(clustering_alg[-1])
+            sc_state.cluster_softmax_degrade(train_data_local_dict, device,
+                                             args.curr_train_iteration, alpha)
+        elif 'softmax_s' in clustering_alg:
+            alpha = int(clustering_alg[-1])
+            sc_state.cluster_softmax_all(train_data_local_dict, device,
+                                         args.curr_train_iteration, alpha)
+        elif clustering_alg == 'gmm':
+            sc_state.cluster_gmm(train_data_local_dict, device,
+                                 args.curr_train_iteration)
+        elif clustering_alg == 'geni':
+            # Load the change points
+            data_path = './../../../data/{}/'.format(args.dataset)
+            change_points = {}
+            with open(data_path + 'change_points', 'r') as cpf:
+                for c, line in enumerate(cpf):
+                    change_points[c] = int(line.strip())
+            sc_state.cluster_geni(args.curr_train_iteration, change_points)
+
+    # Load data by model. Each client gets the latest batch for each model
+    for m in range(args.concept_num):
+        args.retrain_data = 'win-1'
+        datasets.append(loader_func(args))
+
+    # Save state
+    comm.Barrier()
+    if process_id == 0:
+        sc_state.move_model_to_cpu()
+        with open('sc_state.pkl','wb') as f:
+            pickle.dump(sc_state, f)
+    comm.Barrier()
+
     return datasets
