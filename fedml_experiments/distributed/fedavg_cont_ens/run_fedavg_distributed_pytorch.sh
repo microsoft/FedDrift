@@ -14,10 +14,11 @@ DATASET=${11}
 DATA_DIR=${12}
 CI=${13}
 TRAIN_ITER=${14}
-DRIFT_TOGETHER=${15}
-CL_ALGO=${16}
-CL_ALGO_ARG=${17}
-CHANGE_POINTS=${18}
+RESET_MODELS=${15}
+DRIFT_TOGETHER=${16}
+CL_ALGO=${17}
+CL_ALGO_ARG=${18}
+CHANGE_POINTS=${19}
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -61,6 +62,7 @@ do
            --ci $CI \
            --total_train_iteration $TI \
            --curr_train_iteration $it \
+           --reset_models $RESET_MODELS \
            --drift_together $DRIFT_TOGETHER \
            --report_client 1 \
            --retrain_data win-1 \
