@@ -110,6 +110,9 @@ def add_args(parser):
 
     parser.add_argument('--change_points', type=str, default='',
                         help='Specify change points (separates by commas)')
+                        
+    parser.add_argument('--reset_models', type=int, default=0,
+                        help='If the model parameters should be reset between train iterations')
 
     args = parser.parse_args()
     return args
@@ -246,6 +249,13 @@ if __name__ == "__main__":
     for m in range(len(datasets)):
         models.append(create_model(args, model_name=args.model, output_dim=class_num,
                                    feature_dim = feature_num))
+
+    # load params among the prev existing models
+    if args.curr_train_iteration != 0 and not args.reset_models:
+        model_params = torch.load('model_params.pt')
+        for m_idx, p in model_params.items():
+            models[m_idx].load_state_dict(p)
+
 
     # start "federated averaging (FedAvg) with ensembled" for this round
     FedML_FedAvgEns_distributed(process_id, worker_number, device, comm,
