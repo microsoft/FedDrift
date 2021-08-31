@@ -1,4 +1,5 @@
 import logging
+import torch
 
 from fedml_api.distributed.fedavg_ens.message_define import MyMessage
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list
@@ -46,7 +47,8 @@ class FedAvgEnsServerManager(ServerManager):
 
             # start the next round
             self.round_idx += 1
-            if self.round_idx == self.round_num:
+            if self.round_idx == self.round_num - 1:
+                self.save_model_params(global_model_params)
                 self.finish()
                 return
 
@@ -78,3 +80,7 @@ class FedAvgEnsServerManager(ServerManager):
         message.add_params(MyMessage.MSG_ARG_KEY_CLIENT_INDEX, str(client_index))
         message.add_params(MyMessage.MSG_ARG_KEY_EXTRA_INFO, extra_info)
         self.send_message(message)
+        
+    def save_model_params(self, global_model_params):
+        param_dict = dict(enumerate(global_model_params))
+        torch.save(param_dict, 'model_params.pt')
