@@ -251,11 +251,18 @@ if __name__ == "__main__":
                                    feature_dim = feature_num))
 
     # load params among the prev existing models
+    # right now, load models in same order they were saved
+    # TODO: generalize to the proper permutation. This code is wrong for AUE.
     if args.curr_train_iteration != 0 and not args.reset_models:
         model_params = torch.load('model_params.pt')
         for m_idx, p in model_params.items():
             models[m_idx].load_state_dict(p)
-
+        
+        # hard code a special case for mm-variants and 2 concepts:
+        # after all clients finish transition A->B, only load params of model B
+        if args.concept_drift_algo in {"mmacc", "mmgeni", "mmgeniex"} and \
+            len(models) == 1 and len(model_params) == 2:
+                models[0].load_state_dict(model_params[1])
 
     # start "federated averaging (FedAvg) with ensembled" for this round
     FedML_FedAvgEns_distributed(process_id, worker_number, device, comm,
