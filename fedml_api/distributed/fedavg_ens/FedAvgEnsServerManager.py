@@ -47,7 +47,7 @@ class FedAvgEnsServerManager(ServerManager):
 
             # start the next round
             self.round_idx += 1
-            if self.round_idx == self.round_num - 1:
+            if self.round_idx == self.round_num:
                 self.save_model_params(global_model_params)
                 self.finish()
                 return

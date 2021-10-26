@@ -10,7 +10,7 @@ import math
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
-from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data, print_change_points
+from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data, print_change_points, load_all_data
 
 def batch_data(data, batch_size):
     '''
@@ -116,6 +116,10 @@ def load_partition_data_circle(batch_size, current_train_iteration,
     train_data, test_data = load_retrain_table_data(
         data_path, num_client, current_train_iteration,
         'client_{}_iter_{}.csv', retrain_data)
+        
+    all_data_pd = load_all_data(
+        data_path, num_client, current_train_iteration,
+        'client_{}_iter_{}.csv')
     
     # Prepare data for FedML
     train_data_num = 0
@@ -125,6 +129,7 @@ def load_partition_data_circle(batch_size, current_train_iteration,
     train_data_local_num_dict = dict()
     train_data_global = list()
     test_data_global = list()
+    all_data = list()
 
     for c in range(num_client):
         train_data_num += len(train_data[c].index)
@@ -141,13 +146,18 @@ def load_partition_data_circle(batch_size, current_train_iteration,
             test_batch = batch_data(test_data[c], batch_size)        
             test_data_local_dict[c] = test_batch        
             test_data_global += test_batch
+            
+        all_data_c = list()
+        for it in range(current_train_iteration + 1):
+            all_data_c.append(batch_data(all_data_pd[c][it], batch_size))
+        all_data.append(all_data_c)
     
     client_num = num_client
     class_num = 2
 
     return client_num, train_data_num, test_data_num, train_data_global, \
         test_data_global, train_data_local_num_dict, train_data_local_dict, \
-        test_data_local_dict, class_num
+        test_data_local_dict, all_data, class_num
 
 
 def main():
@@ -161,7 +171,7 @@ def main():
     
     #client_num, train_data_num, test_data_num, train_data_global, \
     #test_data_global, train_data_local_num_dict, train_data_local_dict, \
-    #test_data_local_dict, class_num = \
+    #test_data_local_dict, all_data, class_num = \
     #load_partition_data_sea(10, 3, 10)
 
     #print(client_num)

@@ -72,6 +72,11 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
         test_data.append(test_df)                    
 
     return train_data, test_data
+
+def load_all_data(data_path, num_client, current_train_iteration, csv_file_name):
+    return [ [ pd.read_csv(data_path + csv_file_name.format(c, it)) 
+               for it in range(current_train_iteration + 1) ] 
+               for c in range(num_client) ]
     
 def print_change_points(data_path):
     # Print change points for debugging

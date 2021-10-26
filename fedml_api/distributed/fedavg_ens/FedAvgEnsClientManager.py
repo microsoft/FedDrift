@@ -45,7 +45,7 @@ class FedAvgEnsClientManager(ClientManager):
         self.trainer.update_dataset(int(client_index))
         self.round_idx += 1
         self.__train()
-        if self.round_idx == self.num_rounds - 1:
+        if self.round_idx == self.num_rounds:
             self.finish()
 
     def send_model_to_server(self, receive_id, weights_and_num_samples):

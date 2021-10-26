@@ -15,10 +15,11 @@ from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import MultiModelAccSt
 class FedAvgEnsAggregatorMultiModelAcc(object):
     def __init__(self, train_globals, test_globals, all_train_data_nums,
                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
-                 worker_num, device, models, class_num, args):
+                 all_data, worker_num, device, models, class_num, args):
         self.train_globals = train_globals
         self.test_globals = test_globals
         self.all_train_data_nums = all_train_data_nums
+        self.all_data = all_data
 
         self.train_data_local_dicts = train_data_local_dicts
         self.test_data_local_dicts = test_data_local_dicts
@@ -80,32 +81,24 @@ class FedAvgEnsAggregatorMultiModelAcc(object):
             model_list = []
             training_num = 0
 
-            worker_with_model = -1
             for idx in range(self.worker_num):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
                 if num_sample > 0:
-                    worker_with_model = idx
-                if self.args.is_mobile == 1:
-                    model = transform_list_to_tensor(model)
-                
-                model_list.append((num_sample, model))
-                training_num += num_sample
+                    if self.args.is_mobile == 1:
+                        model = transform_list_to_tensor(model)
+                    model_list.append((num_sample, model))
+                    training_num += num_sample
 
             #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
             # logging.info("################aggregate: %d" % len(model_list))
-            (num0, averaged_params) = model_list[worker_with_model]
+            (num0, averaged_params) = model_list[0]
             for k in averaged_params.keys():
-                init = False
                 for i in range(0, len(model_list)):
                     local_sample_number, local_model_params = model_list[i]
-                    # Skip the client that doesn't have data for this model
-                    if local_sample_number == 0:
-                        continue
                     w = local_sample_number / training_num
-                    if not init:                        
+                    if i == 0:
                         averaged_params[k] = local_model_params[k] * w
-                        init = True
                     else:
                         averaged_params[k] += local_model_params[k] * w
 

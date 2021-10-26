@@ -15,10 +15,11 @@ class FedAvgEnsAggregatorAuePc(object):
     EPS = 1e-20
     def __init__(self, train_globals, test_globals, all_train_data_nums,
                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
-                 worker_num, device, models, class_num, args):
+                 all_data, worker_num, device, models, class_num, args):
         self.train_globals = train_globals
         self.test_globals = test_globals
         self.all_train_data_nums = all_train_data_nums
+        self.all_data = all_data
 
         self.train_data_local_dicts = train_data_local_dicts
         self.test_data_local_dicts = test_data_local_dicts
