@@ -7,7 +7,7 @@ import numpy as np
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list, transform_list_to_tensor
 
 
-class FedAvgEnsTrainerClusterFL(object):
+class FedAvgEnsTrainerSoftCluster(object):
     def __init__(self, client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data, device, models,
                  args):
         self.client_index = client_index
@@ -53,21 +53,29 @@ class FedAvgEnsTrainerClusterFL(object):
             model.train()
 
             local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
-            # Skip the training if there is no training data for this model, or the cluster id
-            # doesn't match with the model index
-            cluster_id = self.extra_info[self.client_index]
-            if local_sample_number == 0 or cluster_id != mod_idx:
+            
+            unnorm_probs = np.asarray([self.extra_info['sc_weights'][t][mod_idx][self.client_index] 
+                for t in range(len(self.all_local_data))])
+            
+            # Skip the training if there is no training data for this model
+            # or if all training data are weighted 0
+            if local_sample_number == 0 or sum(unnorm_probs) == 0:
                 results[mod_idx] = (None, 0)
                 continue
-
-            train_local = self.train_data_local_dicts[mod_idx][self.client_index]
+                
+            probs = unnorm_probs/sum(unnorm_probs)            
+            
             criterion = self.criterions[mod_idx]
             optimizer = self.optimizers[mod_idx]
-
+                        
             batch_loss = []
             for step in range(self.args.epochs):
-                batch_idx = np.random.choice(len(train_local))
-                (x, labels) = train_local[batch_idx]
+                t_sample = np.random.choice(len(self.all_local_data), p=probs)
+                data_t = self.all_local_data[t_sample]
+                if len(data_t) == 0:
+                    continue
+                batch_idx = np.random.choice(len(data_t))
+                (x, labels) = data_t[batch_idx]
                 x, labels = x.to(self.device), labels.to(self.device)
                 optimizer.zero_grad()
                 log_probs = model(x)

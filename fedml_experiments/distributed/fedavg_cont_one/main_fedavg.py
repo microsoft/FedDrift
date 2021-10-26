@@ -20,9 +20,15 @@ from fedml_api.data_preprocessing.sine.data_loader import load_partition_data_si
 
 from fedml_api.data_preprocessing.circle.data_loader import load_partition_data_circle
 
+from fedml_api.data_preprocessing.MNIST.data_loader_cont import load_partition_data_mnist
+
 from fedml_api.model.linear.lr import LogisticRegression
 
 from fedml_api.model.fnn.fnn import FeedForwardNN
+
+from fedml_api.model.cv.cnn import CNN_DropOut
+
+from fedml_api.model.utils import reinitialize
 
 from fedml_api.distributed.fedavg.FedAvgAPI import FedML_init, FedML_FedAvg_distributed
 
@@ -104,28 +110,35 @@ def load_data(args, dataset_name):
     
     if dataset_name == "sea":        
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
         class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
                                             args.client_num_in_total, args.retrain_data)
         feature_num = 3
 
     elif dataset_name == "sine":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
         class_num = load_partition_data_sine(args.batch_size, args.curr_train_iteration,
                                              args.client_num_in_total, args.retrain_data)
         feature_num = 2
 
     elif dataset_name == "circle":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
         class_num = load_partition_data_circle(args.batch_size, args.curr_train_iteration,
                                                args.client_num_in_total, args.retrain_data)
         feature_num = 2
+    
+    elif dataset_name == "MNIST":
+        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        class_num = load_partition_data_mnist(args.batch_size, args.curr_train_iteration,
+                                              args.client_num_in_total, args.retrain_data)
+        feature_num = 784
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-               class_num, feature_num]
+               all_data, class_num, feature_num]
     return dataset
 
 
@@ -138,6 +151,10 @@ def create_model(args, model_name, output_dim, feature_dim):
     if model_name == "fnn":
         logging.info("FeedForwardNN, feature_dim = %s" % feature_dim)
         model = FeedForwardNN(feature_dim, output_dim, feature_dim * 2)
+    if model_name == "cnn":
+        logging.info("CNN_DropOut")
+        model = CNN_DropOut()
+    reinitialize(model)
     return model
 
 
@@ -219,7 +236,7 @@ if __name__ == "__main__":
     dataset = load_data(args, args.dataset)
     [train_data_num, test_data_num, train_data_global, test_data_global,
      train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-     class_num, feature_num] = dataset
+     all_data, class_num, feature_num] = dataset
 
     # create model.
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.

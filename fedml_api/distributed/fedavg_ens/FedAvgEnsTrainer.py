@@ -2,17 +2,19 @@ import logging
 
 import torch
 from torch import nn
+import numpy as np
 
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list, transform_list_to_tensor
 
 
 class FedAvgEnsTrainer(object):
-    def __init__(self, client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, device, models,
+    def __init__(self, client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data, device, models,
                  args):
         self.client_index = client_index
         self.train_data_local_dicts = train_data_local_dicts
         self.train_data_local_num_dicts = train_data_local_num_dicts
         self.all_train_data_nums = train_data_nums
+        self.all_local_data = all_local_data
 
         self.device = device
         self.args = args
@@ -60,22 +62,19 @@ class FedAvgEnsTrainer(object):
             criterion = self.criterions[mod_idx]
             optimizer = self.optimizers[mod_idx]
 
-            epoch_loss = []
-            for epoch in range(self.args.epochs):
-                batch_loss = []
-                for batch_idx, (x, labels) in enumerate(train_local):
-                    # logging.info(images.shape)
-                    x, labels = x.to(self.device), labels.to(self.device)
-                    optimizer.zero_grad()
-                    log_probs = model(x)
-                    loss = criterion(log_probs, labels)
-                    loss.backward()
-                    optimizer.step()
-                    batch_loss.append(loss.item())
-                if len(batch_loss) > 0:
-                    epoch_loss.append(sum(batch_loss) / len(batch_loss))
-                    logging.info('(client {}, Model {}. Local Training Epoch: {} \tLoss: {:.6f}'.format(
-                        self.client_index, mod_idx, epoch, sum(epoch_loss) / len(epoch_loss)))
+            batch_loss = []
+            for step in range(self.args.epochs):
+                batch_idx = np.random.choice(len(train_local))
+                (x, labels) = train_local[batch_idx]
+                x, labels = x.to(self.device), labels.to(self.device)
+                optimizer.zero_grad()
+                log_probs = model(x)
+                loss = criterion(log_probs, labels)
+                loss.backward()
+                optimizer.step()
+                batch_loss.append(loss.item())
+                # logging.info('(client {}, Model {}. Local Training Step: {} \tLoss: {:.6f}'.format(
+                    # self.client_index, mod_idx, step, sum(batch_loss) / len(batch_loss)))
 
             weights = model.cpu().state_dict()
 

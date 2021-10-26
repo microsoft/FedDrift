@@ -8,6 +8,7 @@ from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorClusterFL import FedAvg
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorSoftCluster import FedAvgEnsAggregatorSoftCluster
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerClusterFL import FedAvgEnsTrainerClusterFL
+from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerSoftCluster import FedAvgEnsTrainerSoftCluster
 from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
 from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
 
@@ -38,9 +39,9 @@ def FedML_FedAvgEns_data_loader(args, loader_func, device, comm, process_id):
     elif args.concept_drift_algo == "clusterfl":
         return ClusterFL_data_loader(args, loader_func, device,
                                      comm, process_id)
-    elif args.concept_drift_algo == "softcluster":
+    elif args.concept_drift_algo in {"softcluster", "softclusterwin-1", "softclusterreset"}:
         return SoftCluster_data_loader(args, loader_func, device,
-                                       comm, process_id)                                
+                                       comm, process_id)
 
 
 def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
@@ -55,7 +56,7 @@ def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
     for ds in datasets:
         [train_data_num, test_data_num, train_data_global, test_data_global,
          train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-         class_num, feature_num] = ds
+         all_data, class_num, feature_num] = ds
         train_data_nums.append(train_data_num)
         test_data_nums.append(test_data_num)
         train_data_globals.append(train_data_globals)
@@ -69,39 +70,39 @@ def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
     if process_id == 0:
         init_server(args, device, comm, process_id, worker_number, models, train_data_nums, train_data_globals,
                     test_data_globals, train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
-                    class_num)
+                    all_data, class_num)
     else:
         init_client(args, device, comm, process_id, worker_number, models, train_data_nums, train_data_local_num_dicts,
-                    train_data_local_dicts)
+                    train_data_local_dicts, all_data[process_id - 1])
 
 
 def init_server(args, device, comm, rank, size, models, train_data_nums, train_data_globals, test_data_globals,
-                train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, class_num):
+                train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, class_num):
     # aggregator
     worker_num = size - 1
     if args.concept_drift_algo == "aue":
         aggregator = FedAvgEnsAggregatorAue(train_data_globals, test_data_globals, train_data_nums,
-                                            train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                            train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
                                             device, models, class_num, args)
     elif args.concept_drift_algo == "auepc":
         aggregator = FedAvgEnsAggregatorAuePc(train_data_globals, test_data_globals, train_data_nums,
-                                              train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                              train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
                                               device, models, class_num, args)
     elif args.concept_drift_algo == "driftsurf":
         aggregator = FedAvgEnsAggregatorDriftSurf(train_data_globals, test_data_globals, train_data_nums,
-                                                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
                                                   device, models, class_num, args)
     elif args.concept_drift_algo in {"mmacc", "mmgeni", "mmgeniex"}:
         aggregator = FedAvgEnsAggregatorMultiModelAcc(train_data_globals, test_data_globals, train_data_nums,
-                                                      train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                                      train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
                                                       device, models, class_num, args)
     elif args.concept_drift_algo == "clusterfl":
         aggregator = FedAvgEnsAggregatorClusterFL(train_data_globals, test_data_globals, train_data_nums,
-                                                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
                                                   device, models, class_num, args)
-    elif args.concept_drift_algo == "softcluster":
+    elif args.concept_drift_algo in {"softcluster", "softclusterwin-1", "softclusterreset"}:
         aggregator = FedAvgEnsAggregatorSoftCluster(train_data_globals, test_data_globals, train_data_nums,
-                                                    train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, worker_num,
+                                                    train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
                                                     device, models, class_num, args)
     else:
         raise NameError('concept_drift_algo')
@@ -115,14 +116,17 @@ def init_server(args, device, comm, rank, size, models, train_data_nums, train_d
 # - client should be modified to decentralized worker
 # - add group id 
 # - Add MPC related setting
-def init_client(args, device, comm, process_id, size, models, train_data_nums, train_data_local_num_dicts, train_data_local_dicts):
+def init_client(args, device, comm, process_id, size, models, train_data_nums, train_data_local_num_dicts, train_data_local_dicts, all_local_data):
     # trainer
     client_index = process_id - 1
     if args.concept_drift_algo == "clusterfl":
-        trainer = FedAvgEnsTrainerClusterFL(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums,
+        trainer = FedAvgEnsTrainerClusterFL(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
                                             device, models, args)
+    if args.concept_drift_algo in {"softcluster", "softclusterwin-1", "softclusterreset"}:
+        trainer = FedAvgEnsTrainerSoftCluster(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
+                                   device, models, args)
     else:
-        trainer = FedAvgEnsTrainer(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums,
+        trainer = FedAvgEnsTrainer(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
                                    device, models, args)
 
     client_manager = FedAvgEnsClientManager(args, trainer, comm, process_id, size)

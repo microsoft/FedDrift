@@ -10,15 +10,17 @@ from torch import nn
 
 from fedml_api.distributed.fedavg.utils import transform_list_to_tensor, transform_tensor_to_list
 from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import SoftClusterState
+from fedml_api.model.utils import reinitialize
 
 
 class FedAvgEnsAggregatorSoftCluster(object):
     def __init__(self, train_globals, test_globals, all_train_data_nums,
                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
-                 worker_num, device, models, class_num, args):
+                 all_data, worker_num, device, models, class_num, args):
         self.train_globals = train_globals
         self.test_globals = test_globals
         self.all_train_data_nums = all_train_data_nums
+        self.all_data = all_data
 
         self.train_data_local_dicts = train_data_local_dicts
         self.test_data_local_dicts = test_data_local_dicts
@@ -45,23 +47,33 @@ class FedAvgEnsAggregatorSoftCluster(object):
         # Load the previous state and models
         with open('sc_state.pkl', 'rb') as f:
             sc_state = pickle.load(f)
-        # Assign models to the ones that are being trained
-        for idx in range(len(self.models)):
-            sc_state.set_model(idx, self.models[idx])
-        # Print the test model index for debugging
-        for c in range(self.args.client_num_in_total):
-            test_idx = sc_state.get_test_model_idx(c)
-            print('Client {} test model is {}'.format(c, test_idx))
         
-        logging.info('### Current Weights ###')
-        logging.info('Iteration {}'.format(self.args.curr_train_iteration))
-        for c in range(self.args.client_num_in_total):
-            logging.info('  Client {}:'.format(c))
-            for m_idx in range(len(self.models)):
-                logging.info('    Model {}: {}'.format(m_idx, sc_state.get_train_model_weights(m_idx, c)))
-        for c in range(self.args.client_num_in_total):
-            if self.args.report_client == 1:
-                wandb.run.summary["Weight/CL-{}".format(c)] = sc_state.get_train_model_weights(1, c)
+        # Run the clustering at the beginning of the iteration
+        if self.args.curr_train_iteration == 0:
+            sc_state.cluster_init()
+        else:
+            curr_acc = self.train_acc_matrix()
+            sc_state.cluster(curr_acc, self.args.curr_train_iteration)
+            
+            # If win-1 variant, reset weights of prev iters
+            if self.args.concept_drift_algo == 'softclusterwin-1':
+                sc_state.set_weights_win1(self.args.curr_train_iteration)
+            
+            # If reset variant, reset model and redo the clustering whenever mud detected
+            if all(curr_acc[1] < curr_acc[0] + 0.01):
+                wandb.run.summary["Mud"] = 1
+                if self.args.concept_drift_algo == 'softclusterreset':
+                    sc_state.set_weights_zero_b()
+                    reinitialize(self.models[1])
+                    new_acc = self.train_acc_matrix()
+                    sc_state.cluster(new_acc, self.args.curr_train_iteration)
+        
+        logging.info('### Weights at iteration {} ###'.format(self.args.curr_train_iteration))
+        logging.info(sc_state.get_weights()[self.args.curr_train_iteration])
+        if self.args.report_client == 1:
+            for c in range(self.args.client_num_in_total):
+                weight_m1 = sc_state.get_weights()[self.args.curr_train_iteration][1][c]
+                wandb.run.summary["Weight/CL-{}".format(c)] = weight_m1
         
         return sc_state
 
@@ -81,48 +93,39 @@ class FedAvgEnsAggregatorSoftCluster(object):
         for idx in range(self.worker_num):
             self.flag_client_model_uploaded_dict[idx] = False
         return True
-
+        
     def aggregate(self, round_idx):
         start_time = time.time()
 
         # Do aggregate for all models one by one
         for m_idx in range(len(self.models)):
             model_list = []
-            training_num = 0
+            total_weight = 0
 
-            worker_with_model = -1
             for idx in range(self.worker_num):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
-                weight = self.sc_state.get_train_model_weights(m_idx, idx)
-                # aggregation is additionally normalized by the soft clustering wt
-                num_sample = num_sample * weight
-                if num_sample > 0:
-                    worker_with_model = idx
-                if self.args.is_mobile == 1:
-                    model = transform_list_to_tensor(model)
-                
-                model_list.append((num_sample, model))
-                training_num += num_sample
+                weight = sum(self.sc_state.get_weights()[t][m_idx][idx] \
+                             for t in range(0, self.args.curr_train_iteration + 1))
+                if weight > 0:
+                    if self.args.is_mobile == 1:
+                        model = transform_list_to_tensor(model)
+                    model_list.append((weight, model))
+                    total_weight += weight
             
             # Skip the model that has no updates from any client
-            if worker_with_model == -1:
+            if total_weight == 0:
                 continue
             
             #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
             # logging.info("################aggregate: %d" % len(model_list))
-            (num0, averaged_params) = model_list[worker_with_model]
+            (num0, averaged_params) = model_list[0]
             for k in averaged_params.keys():
-                init = False
                 for i in range(0, len(model_list)):
-                    local_sample_number, local_model_params = model_list[i]
-                    # Skip the client that doesn't have data for this model
-                    if local_sample_number == 0:
-                        continue
-                    w = local_sample_number / training_num
-                    if not init:                        
+                    local_weight, local_model_params = model_list[i]
+                    w = local_weight / total_weight
+                    if i == 0:                        
                         averaged_params[k] = local_model_params[k] * w
-                        init = True
                     else:
                         averaged_params[k] += local_model_params[k] * w
 
@@ -144,7 +147,7 @@ class FedAvgEnsAggregatorSoftCluster(object):
         return client_indexes
 
     def extra_info(self, round_idx):
-        return None
+        return {'sc_weights': self.sc_state.get_weights()}
 
     def test_on_all_clients(self, round_idx):
         if round_idx % self.args.frequency_of_the_test == 0 or round_idx == self.args.comm_round - 1:
@@ -157,7 +160,7 @@ class FedAvgEnsAggregatorSoftCluster(object):
             test_tot_corrects = []
             test_losses = []
             for client_idx in range(self.args.client_num_in_total):
-                test_model_idx = self.sc_state.get_test_model_idx(client_idx)
+                test_model_idx = self.sc_state.get_test_model_idx(self.args.curr_train_iteration, client_idx)
                 train_model_idx = test_model_idx
                 # train data
                 train_tot_correct, train_num_sample, train_loss = self._infer(self.models[train_model_idx],
@@ -205,10 +208,20 @@ class FedAvgEnsAggregatorSoftCluster(object):
 
         # Save SC state
         if round_idx > (self.args.comm_round - 5):
-            self.sc_state.move_model_to_cpu()
             with open('sc_state.pkl','wb') as f:
                 pickle.dump(self.sc_state, f)
-
+                
+    def train_acc_matrix(self):
+        acc = np.zeros((len(self.models), self.args.client_num_in_total))
+        
+        for m in range(len(self.models)):
+            for c in range(self.args.client_num_in_total):
+                data = self.all_data[c][self.args.curr_train_iteration]
+                num_correct, num_sample, _ = self._infer(self.models[m], data)
+                if num_sample != 0:
+                    acc[m][c] = num_correct/num_sample
+        
+        return acc
 
     def _infer(self, model, test_data):
         model.eval()
