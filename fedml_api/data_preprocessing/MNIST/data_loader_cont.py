@@ -6,23 +6,26 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import math
+import PIL.Image as Image
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
+from fedml_api.model.linear.lr import LogisticRegression
 from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data, print_change_points, load_all_data
+from fedml_api.data_preprocessing.MNIST.data_loader import read_data
 
 def batch_data(data, batch_size):
     '''
-    data is in panda frames [f1, f2, label]
+    data is in panda frames. the last column is the label
     convert it into batches of (x, y)
     '''
     # randomly shuffle data
     data = data.sample(frac=1).reset_index(drop=True)
 
     # convert to numpy arrays
-    data_x = data[['f1', 'f2']].values.astype(np.float64)
-    data_y = data[['label']].values.astype(np.int32).flatten()
+    ndata = data.to_numpy()
+    data_x = ndata[:, :-1].astype(np.float64)
+    data_y = ndata[:, -1].astype(np.int32)
 
     # loop through mini-batches
     batch_data = list()
@@ -34,36 +37,16 @@ def batch_data(data, batch_size):
         batch_data.append((batched_x, batched_y))
     return batch_data
 
-def generate_sine_sample(num_sample, default_concept):
-    data_x = np.random.rand(num_sample, 2)
-    if default_concept:
-        data_y = [1 if data_x[i, 1] <= math.sin(data_x[i, 0]) else 0
-                  for i in range(num_sample)]
-    else:
-        data_y = [0 if data_x[i, 1] <= math.sin(data_x[i, 0]) else 1
-                  for i in range(num_sample)]
-    data_y = np.array(data_y)
+def generate_data_mnist(train_iteration, num_client, drift_together,
+                        change_point_str):
 
-    return np.concatenate((data_x, np.expand_dims(data_y, axis=1)), axis=1)
+    data_path = "./../../../data/MNIST/"
 
-def generate_data_sine(train_iteration, num_client, drift_together,
-                       change_point_str):
-
-    data_path = "./../../../data/sine/"
-
-    # We always use 500 samples per client in each training iteration for now
+    # We always use 500 samples per client in each training iteration
     # TODO: change to variable sample sizes
     # TODO: generate more clients than requested for client sampling
     sample_per_client_iter = 500
-
-    if not os.path.exists(data_path):
-        os.makedirs(data_path)
     
-    # We always use 500 samples per client in each training iteration
-    # TODO: change to variable sample sizes
-    
-    sample_per_client_iter = 500
-
     # Randomly generate change point for each client
     if change_point_str == '':
         if drift_together == 1:
@@ -80,38 +63,37 @@ def generate_data_sine(train_iteration, num_client, drift_together,
     for idx, cp in enumerate(change_point):
         print('Change point for client {} is {}'.format(idx, cp))
         
+    # Read all the MNIST data from file
+    mnist = MNIST_Data()
+        
     # Generate data for each client/iteration
     train_data = [[] for t in range(train_iteration + 1)]
     for it in range(train_iteration + 1):
         for c in range(num_client):
-            train_data = np.array([])
+            train_data = []
             # Get samples for the first concept
             if it < change_point[c]:
                 num_sample = int(min(1.0, change_point[c] - it) *
                                  sample_per_client_iter)
-                train_data = generate_sine_sample(num_sample, True)
-            # Get samples for the second concept
+                train_data += mnist.generate_sample(num_sample, 0)
+            # Get samples for the second concept, which is a 180 deg rotation (k=2)
             if it + 1 > change_point[c]:
                 num_sample = int(min(1.0, it + 1.0 - change_point[c]) *
                                  sample_per_client_iter)
-                new_data = generate_sine_sample(num_sample, False)
-                train_data = np.vstack([train_data, new_data]) \
-                             if train_data.size else new_data
-                             
+                train_data += mnist.generate_sample(num_sample, 2)
             # Save the data as files
             pd.DataFrame(train_data).to_csv(
                 data_path + 'client_{}_iter_{}.csv'.format(c, it),
-                index = False, header = ('f1', 'f2', 'label'))        
+                index = False)
             
     # Write change points for debugging
     with open(data_path + 'change_points', 'w') as cpf:
         for c in range(num_client):
             cpf.write('{}\n'.format(change_point[c]))
-    
 
-def load_partition_data_sine(batch_size, current_train_iteration,
-                             num_client, retrain_data):
-    data_path = "./../../../data/sine/"
+def load_partition_data_mnist(batch_size, current_train_iteration,
+                              num_client, retrain_data):
+    data_path = "./../../../data/MNIST/"
 
     print_change_points(data_path)
 
@@ -123,7 +105,7 @@ def load_partition_data_sine(batch_size, current_train_iteration,
     all_data_pd = load_all_data(
         data_path, num_client, current_train_iteration,
         'client_{}_iter_{}.csv')
-        
+    
     # Prepare data for FedML
     train_data_num = 0
     test_data_num = 0
@@ -149,41 +131,74 @@ def load_partition_data_sine(batch_size, current_train_iteration,
             test_batch = batch_data(test_data[c], batch_size)        
             test_data_local_dict[c] = test_batch        
             test_data_global += test_batch
-            
+        
         all_data_c = list()
         for it in range(current_train_iteration + 1):
             all_data_c.append(batch_data(all_data_pd[c][it], batch_size))
         all_data.append(all_data_c)
-    
+            
     client_num = num_client
-    class_num = 2
+    class_num = 10
 
     return client_num, train_data_num, test_data_num, train_data_global, \
         test_data_global, train_data_local_num_dict, train_data_local_dict, \
         test_data_local_dict, all_data, class_num
+        
 
+class MNIST_Data:
+    def __init__(self):
+        train_path = "./../../../data/MNIST/train"
+        test_path = "./../../../data/MNIST/test"
+        users, groups, train_data, test_data = read_data(train_path, test_path)
+
+        # aggregate all the data
+        X = []
+        Y = []
+        for u in users:
+            X.extend(train_data[u]['x'])
+            Y.extend(train_data[u]['y'])
+        
+        # shuffle the order
+        nX = np.asarray(X)
+        nY = np.asarray(Y)
+        np.random.seed(100)
+        rng_state = np.random.get_state()
+        np.random.shuffle(nX)
+        np.random.set_state(rng_state)
+        np.random.shuffle(nY)
+        
+        self.nX = nX
+        self.nY = nY
+        self.samples_used = 0
+
+    def generate_sample(self, num_sample, rotation_k):
+        samples = []
+        
+        for i in range(self.samples_used, self.samples_used + num_sample):
+            x = self.nX[i]
+            y = self.nY[i]
+            if rotation_k != 0:
+                x2d = np.reshape(x, (28, 28))
+                rx2d = np.rot90(x2d, k=rotation_k)
+                x = rx2d.flatten()
+            samples.append(np.concatenate((x, [y])))
+        
+        self.samples_used += num_sample
+        
+        return samples
 
 def main():
-
-    np.random.seed(0)
-    torch.manual_seed(10)
-
-    generate_data_sine(5, 10, 0)
-
-    #generate_data_sea(5, 10, 0)
     
-    #client_num, train_data_num, test_data_num, train_data_global, \
-    #test_data_global, train_data_local_num_dict, train_data_local_dict, \
-    #test_data_local_dict, all_data, class_num = \
-    #load_partition_data_sea(10, 3, 10)
+    mnist = MNIST_Data()
 
-    #print(client_num)
-    #print(train_data_num)
-    #print(test_data_num)    
-    #print(train_data_local_num_dict)
-    #print(class_num)
-    #print(test_data_global[0])
-    
+    ex = mnist.nX[0]
+    shifted_x = (ex - min(ex))/(max(ex)-min(ex))
+    x_2d = np.reshape(shifted_x, (28, 28))
+    x_2d_rot = np.rot90(x_2d, k=2)
+    img = Image.fromarray(np.uint8(x_2d*255), 'L')
+    img_rot = Image.fromarray(np.uint8(x_2d_rot*255), 'L')
+    img.show()
+    img_rot.show()
     
 
 if __name__ == '__main__':
