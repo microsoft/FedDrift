@@ -77,9 +77,3 @@ def load_all_data(data_path, num_client, current_train_iteration, csv_file_name)
     return [ [ pd.read_csv(data_path + csv_file_name.format(c, it)) 
                for it in range(current_train_iteration + 1) ] 
                for c in range(num_client) ]
-    
-def print_change_points(data_path):
-    # Print change points for debugging
-    with open(data_path + 'change_points', 'r') as cpf:
-        for c, line in enumerate(cpf):
-            print('Client {} change point is {}'.format(c, line.strip()))

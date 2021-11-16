@@ -14,11 +14,12 @@ DATASET=${11}
 DATA_DIR=${12}
 CI=${13}
 TRAIN_ITER=${14}
-RESET_MODELS=${15}
-DRIFT_TOGETHER=${16}
-CL_ALGO=${17}
-CL_ALGO_ARG=${18}
-CHANGE_POINTS=${19}
+CONCEPT_NUM=${15}
+RESET_MODELS=${16}
+DRIFT_TOGETHER=${17}
+CL_ALGO=${18}
+CL_ALGO_ARG=${19}
+CHANGE_POINTS=${20}
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -36,7 +37,7 @@ python3 ./prepare_data.py \
   --batch_size $BATCH_SIZE \
   --train_iteration $TRAIN_ITER \
   --drift_together $DRIFT_TOGETHER \
-  --change_points "${CHANGE_POINTS}"
+  --change_points "${CHANGE_POINTS:-rand}"
 
 # Execute the training for one iteration at a time
 # We do this because the FedML framework calls MPI_Abort whenever
@@ -62,6 +63,7 @@ do
            --ci $CI \
            --total_train_iteration $TI \
            --curr_train_iteration $it \
+           --concept_num $CONCEPT_NUM \
            --reset_models $RESET_MODELS \
            --drift_together $DRIFT_TOGETHER \
            --report_client 1 \

@@ -47,7 +47,7 @@ def add_args(parser):
                         help='If the concept drift happens at the same time across all clients')
 
     parser.add_argument('--change_points', type=str, default='',
-                        help='Specify change points (separates by commas)')
+                        help='Specify change point matrix (a filename in data dir)')
     
     args = parser.parse_args()
     return args

@@ -69,7 +69,7 @@ def prepare_data(args, dataset_name):
     elif dataset_name == "MNIST":
         logging.info("generate_data. dataset_name = %s" % dataset_name)
         generate_data_mnist(args.train_iteration, args.client_num_in_total,
-                            args.drift_together, args.change_points)
+                            args.drift_together)
                                     
     return
 
