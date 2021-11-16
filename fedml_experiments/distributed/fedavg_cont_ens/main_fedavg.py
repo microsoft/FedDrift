@@ -115,7 +115,7 @@ def add_args(parser):
                         help='The number of concepts in the experiments')
 
     parser.add_argument('--change_points', type=str, default='',
-                        help='Specify change points (separates by commas)')
+                        help='Specify change point matrix (a filename in data dir)')
                         
     parser.add_argument('--reset_models', type=int, default=0,
                         help='If the model parameters should be reset between train iterations')

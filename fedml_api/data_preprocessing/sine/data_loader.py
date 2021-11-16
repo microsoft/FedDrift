@@ -10,7 +10,7 @@ import math
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
-from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data, print_change_points, load_all_data
+from fedml_api.data_preprocessing.common.retrain import load_retrain_table_data, load_all_data
 
 def batch_data(data, batch_size):
     '''
@@ -47,7 +47,7 @@ def generate_sine_sample(num_sample, default_concept):
     return np.concatenate((data_x, np.expand_dims(data_y, axis=1)), axis=1)
 
 def generate_data_sine(train_iteration, num_client, drift_together,
-                       change_point_str):
+                       change_point_str='rand'):
 
     data_path = "./../../../data/sine/"
 
@@ -64,56 +64,55 @@ def generate_data_sine(train_iteration, num_client, drift_together,
     
     sample_per_client_iter = 500
 
-    # Randomly generate change point for each client
-    if change_point_str == '':
+    # Randomly generate a single change point for each client
+    if change_point_str == 'rand':
         if drift_together == 1:
             #cp = np.random.random_sample() * train_iteration
             cp = np.random.randint(1, train_iteration)
-            change_point = [cp for c in range(num_client)]
+            change_point_per_client = [cp for c in range(num_client)]
         else:
-            change_point = [np.random.randint(1, train_iteration)
-                            for c in range(num_client)]
-    else:
-        change_point = json.loads(change_point_str)
-
-    # Print change points
-    for idx, cp in enumerate(change_point):
-        print('Change point for client {} is {}'.format(idx, cp))
+            change_point_per_client = [np.random.randint(1, train_iteration)
+                                       for c in range(num_client)]
+        
+        # matrix of the concept in the training data for each time, client.
+        # restricted to concept changes at time step boundary
+        change_point = np.zeros((train_iteration+1, num_client))
+        for c in range(num_client):
+            t = change_point_per_client[c]
+            change_point[t:,c] = 1
+        np.savetxt("./../../../data/changepoints/rand.cp", change_point, fmt='%u')
+    
+    change_point = np.loadtxt("./../../../data/changepoints/{0}.cp".format(change_point_str), dtype=np.dtype(int))
         
     # Generate data for each client/iteration
-    train_data = [[] for t in range(train_iteration + 1)]
     for it in range(train_iteration + 1):
         for c in range(num_client):
-            train_data = np.array([])
-            # Get samples for the first concept
-            if it < change_point[c]:
-                num_sample = int(min(1.0, change_point[c] - it) *
-                                 sample_per_client_iter)
-                train_data = generate_sine_sample(num_sample, True)
-            # Get samples for the second concept
-            if it + 1 > change_point[c]:
-                num_sample = int(min(1.0, it + 1.0 - change_point[c]) *
-                                 sample_per_client_iter)
-                new_data = generate_sine_sample(num_sample, False)
-                train_data = np.vstack([train_data, new_data]) \
-                             if train_data.size else new_data
-                             
+            # train_data = np.array([])
+            # # Get samples for the first concept
+            # if it < change_point[c]:
+                # num_sample = int(min(1.0, change_point[c] - it) *
+                                 # sample_per_client_iter)
+                # train_data = generate_sine_sample(num_sample, True)
+            # # Get samples for the second concept
+            # if it + 1 > change_point[c]:
+                # num_sample = int(min(1.0, it + 1.0 - change_point[c]) *
+                                 # sample_per_client_iter)
+                # new_data = generate_sine_sample(num_sample, False)
+                # train_data = np.vstack([train_data, new_data]) \
+                             # if train_data.size else new_data
+            
+            is_default_concept = not(change_point[it][c])
+            train_data = generate_sine_sample(sample_per_client_iter, is_default_concept)     
+            
             # Save the data as files
             pd.DataFrame(train_data).to_csv(
                 data_path + 'client_{}_iter_{}.csv'.format(c, it),
-                index = False, header = ('f1', 'f2', 'label'))        
-            
-    # Write change points for debugging
-    with open(data_path + 'change_points', 'w') as cpf:
-        for c in range(num_client):
-            cpf.write('{}\n'.format(change_point[c]))
+                index = False, header = ('f1', 'f2', 'label'))
     
 
 def load_partition_data_sine(batch_size, current_train_iteration,
                              num_client, retrain_data):
     data_path = "./../../../data/sine/"
-
-    print_change_points(data_path)
 
     # Load the data from generated CSVs
     train_data, test_data = load_retrain_table_data(

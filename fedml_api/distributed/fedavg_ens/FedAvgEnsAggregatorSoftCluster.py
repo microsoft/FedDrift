@@ -49,31 +49,33 @@ class FedAvgEnsAggregatorSoftCluster(object):
             sc_state = pickle.load(f)
         
         # Run the clustering at the beginning of the iteration
-        if self.args.curr_train_iteration == 0:
+        # for now, hardcode type D, which has multiple concepts at time 0
+        if self.args.curr_train_iteration == 0 and self.args.change_points != 'D':
             sc_state.cluster_init()
         else:
             curr_acc = self.train_acc_matrix()
-            sc_state.cluster(curr_acc, self.args.curr_train_iteration)
+            
+            # If reset variant, delete models that are not epsilon-better than the rest
+            if self.args.concept_drift_algo == 'softclusterreset':
+                # if all(curr_acc[1] < curr_acc[0] + 0.01):
+                deleted_models = []
+                for m in reversed(range(len(self.models))):
+                    rest = np.delete(curr_acc, deleted_models+[m], axis=0)
+                    if rest.shape[0] > 0:
+                        if all(curr_acc[m] < np.max(rest, axis=0) + 0.01):
+                            deleted_models.append(m)
+                            wandb.run.summary["Reset-{}".format(m)] = 1
+                            sc_state.set_weights_zero_model(m)
+                            reinitialize(self.models[m])
+                if len(deleted_models) > 0:
+                    curr_acc = self.train_acc_matrix()
+            
+            # Cluster on current accuracy
+            sc_state.cluster(curr_acc, self.args.curr_train_iteration, 0)
             
             # If win-1 variant, reset weights of prev iters
             if self.args.concept_drift_algo == 'softclusterwin-1':
                 sc_state.set_weights_win1(self.args.curr_train_iteration)
-            
-            # If reset variant, reset model and redo the clustering whenever mud detected
-            if all(curr_acc[1] < curr_acc[0] + 0.01):
-                wandb.run.summary["Mud"] = 1
-                if self.args.concept_drift_algo == 'softclusterreset':
-                    sc_state.set_weights_zero_b()
-                    reinitialize(self.models[1])
-                    new_acc = self.train_acc_matrix()
-                    sc_state.cluster(new_acc, self.args.curr_train_iteration)
-        
-        logging.info('### Weights at iteration {} ###'.format(self.args.curr_train_iteration))
-        logging.info(sc_state.get_weights()[self.args.curr_train_iteration])
-        if self.args.report_client == 1:
-            for c in range(self.args.client_num_in_total):
-                weight_m1 = sc_state.get_weights()[self.args.curr_train_iteration][1][c]
-                wandb.run.summary["Weight/CL-{}".format(c)] = weight_m1
         
         return sc_state
 
@@ -131,6 +133,11 @@ class FedAvgEnsAggregatorSoftCluster(object):
 
             # update the global model which is cached at the server side
             self.models[m_idx].load_state_dict(averaged_params)
+            
+        # update the clustering every round
+        curr_acc = self.train_acc_matrix()
+        # inflate round_idx by 1 to distinguish from the initial clustering
+        self.sc_state.cluster(curr_acc, self.args.curr_train_iteration, round_idx+1)
             
         end_time = time.time()
         logging.info("aggregate time cost: %d" % (end_time - start_time))

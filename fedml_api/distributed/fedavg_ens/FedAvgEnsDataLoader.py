@@ -5,6 +5,7 @@ import json
 from scipy.special import softmax
 from sklearn.mixture import GaussianMixture
 import logging
+import wandb
 
 # Loader function for AUE
 def AUE_data_loader(args, loader_func, device):
@@ -254,11 +255,7 @@ class MultiModelAccState:
     def model_select_geni(self, curr_iter, change_points):
         # Only works for two models and one change point
         for c in range(self.client_num):
-            cp = change_points[c]
-            if curr_iter >= cp:
-                best_model = 1
-            else:
-                best_model = 0            
+            best_model = change_points[curr_iter][c]
             self.train_data_dict[best_model][c].append(curr_iter)
             self.train_model_idx[c] = best_model
             self.test_model_idx[c] = best_model
@@ -268,19 +265,15 @@ class MultiModelAccState:
         # This one can predict which model for testing based on
         # the oracle knowledge
         min_cp = 1000000
-        for c in range(self.client_num):
-            if change_points[c] < min_cp:
-                min_cp = change_points[c]
+        for t in range(change_points.shape[0]):
+            if any(change_points[t]):
+                min_cp = t
+                break
                 
         for c in range(self.client_num):
-            cp = change_points[c]
-            if curr_iter >= cp:
-                train_model = 1
-            else:
-                train_model = 0
-
-            if curr_iter >= (cp-1) and cp > min_cp:
-                test_model = 1
+            train_model = change_points[curr_iter][c]
+            if curr_iter >= min_cp:
+                test_model = change_points[curr_iter+1][c]
             else:
                 test_model = train_model
                 
@@ -365,12 +358,7 @@ def MultiModelAcc_data_loader(args, loader_func, device, comm, process_id):
 
 def MultiModelGeni_data_loader(args, loader_func, device, comm, process_id):
     datasets = []
-    # Load the change points
-    data_path = './../../../data/{}/'.format(args.dataset)
-    change_points = {}
-    with open(data_path + 'change_points', 'r') as cpf:
-        for c, line in enumerate(cpf):
-            change_points[c] = int(line.strip())
+    change_points = np.loadtxt("./../../../data/changepoints/{0}.cp".format(args.change_points), dtype=np.dtype(int))
             
     if args.curr_train_iteration == 0:
         mm_state = MultiModelAccState(args.client_num_in_total,
@@ -404,12 +392,7 @@ def MultiModelGeni_data_loader(args, loader_func, device, comm, process_id):
 
 def MultiModelGeniEx_data_loader(args, loader_func, device, comm, process_id):
     datasets = []
-    # Load the change points
-    data_path = './../../../data/{}/'.format(args.dataset)
-    change_points = {}
-    with open(data_path + 'change_points', 'r') as cpf:
-        for c, line in enumerate(cpf):
-            change_points[c] = int(line.strip())
+    change_points = np.loadtxt("./../../../data/changepoints/{0}.cp".format(args.change_points), dtype=np.dtype(int))
             
     if args.curr_train_iteration == 0:
         mm_state = MultiModelAccState(args.client_num_in_total,
@@ -452,7 +435,7 @@ def ClusterFL_data_loader(args, loader_func, device, comm, process_id):
     
 class SoftClusterState:
     def __init__(self, client_num, model_num=2, cluster_alg='softmax_0', 
-                 mmacc_delta=0.1, softmax_alpha=0, geni_change_points={}):
+                 mmacc_delta=0.1, softmax_alpha=0, geni_change_points=None):
         self.client_num = client_num
         self.model_num = model_num
         # keys are iterations, and values are weight matrices (model_num x client_num)
@@ -470,19 +453,34 @@ class SoftClusterState:
         for c in range(self.client_num):
             self.train_data_weights[0][0][c] = 1.
         
-    def cluster(self, acc_matrix, curr_iter):
+    def cluster(self, acc_matrix, curr_iter, round_idx):
         if self.cluster_alg == "hard":
             self.cluster_hard(acc_matrix, curr_iter)
         elif 'softmax' in self.cluster_alg:
             self.cluster_softmax(acc_matrix, curr_iter)
         elif 'mmacc' in self.cluster_alg:
-            self.cluster_mmacc(acc_matrix, curr_iter)
+            if round_idx == 0:
+                self.cluster_mmacc(acc_matrix, curr_iter)
+            else:
+                self.cluster_hard_among_existing(acc_matrix, curr_iter)
         elif self.cluster_alg == 'gmm':
             self.cluster_gmm(acc_matrix, curr_iter)
         elif self.cluster_alg == 'geni':
-            self.cluster_geni(curr_iter)
+            if round_idx == 0:
+                self.cluster_geni(curr_iter)
         else:
             raise NameError('cluster alg')
+            
+        for c in range(self.client_num):
+            if self.model_num == 2:
+                wandb.log({"Weight-1/CL-{}".format(c): self.train_data_weights[curr_iter][1][c],
+                           "round": round_idx})
+            else:
+                wandb.log({"Plurality/CL-{}".format(c): self.get_test_model_idx(curr_iter, c), 
+                           "round": round_idx})
+                if 'softmax' in self.cluster_alg:
+                    wandb.log({"Weight-All/CL-{}".format(c): np.array2string(self.train_data_weights[curr_iter][:,c]),
+                               "round": round_idx})
             
     def cluster_hard(self, acc_matrix, curr_iter):
         # initialize weight matrix
@@ -499,27 +497,44 @@ class SoftClusterState:
     
     # replicate mmacc. only makes sense to run this once per iter
     def cluster_mmacc(self, acc_matrix, curr_iter):
-        # clustering occurs only among models already initialized        
-        last_model_in_use = -1
-        for m in reversed(range(self.model_num)):
+        # clustering occurs only among models already initialized and not reset
+        models_in_use = []
+        for m in range(self.model_num):
             if any( self.train_data_weights[curr_iter-1][m] > 0 ):
-                last_model_in_use = m
-                break
-        models_used = last_model_in_use + 1
-        if models_used == self.model_num:
-            next_free_model = -1
-        else:
-            next_free_model = last_model_in_use + 1
+                models_in_use.append(m)
         
+        next_free_model = -1
+        for m in range(self.model_num):
+            if m not in models_in_use:
+                next_free_model = m
+                break
+                
         # initialize weight matrix
         self.train_data_weights[curr_iter] = np.zeros((self.model_num, self.client_num))
         
-        # identify best model among models_used, and switch to a new model if acc degrades
+        # identify best model among models_in_use, and switch to a new model if acc degrades
         for c in range(self.client_num):
-            best_model = np.argmax(acc_matrix[:models_used,c])
+            best_model_idx = np.argmax(acc_matrix[models_in_use,c])
+            best_model = models_in_use[best_model_idx]
             if self.mmacc_acc_dict[c] - acc_matrix[best_model][c] > self.mmacc_delta and \
                next_free_model != -1:
                 best_model = next_free_model                
+            self.train_data_weights[curr_iter][best_model][c] = 1.
+        
+    def cluster_hard_among_existing(self, acc_matrix, curr_iter):
+        # clustering occurs only among models currently in use
+        models_in_use = []
+        for m in range(self.model_num):
+            if any( self.train_data_weights[curr_iter][m] > 0 ):
+                models_in_use.append(m)
+        
+        # reset the weight matrix
+        self.train_data_weights[curr_iter] = np.zeros((self.model_num, self.client_num))
+        
+        # identify best model among models_in_use
+        for c in range(self.client_num):
+            best_model_idx = np.argmax(acc_matrix[models_in_use,c])
+            best_model = models_in_use[best_model_idx]               
             self.train_data_weights[curr_iter][best_model][c] = 1.
 
     def cluster_gmm(self, acc_matrix, curr_iter):
@@ -541,11 +556,7 @@ class SoftClusterState:
         self.train_data_weights[curr_iter] = np.zeros((self.model_num, self.client_num))
         
         for c in range(self.client_num):
-            cp = self.geni_change_points[c]
-            if curr_iter >= cp:
-                best_model = 1
-            else:
-                best_model = 0
+            best_model = self.geni_change_points[curr_iter][c]
             self.train_data_weights[curr_iter][best_model][c] = 1.
 
     # extra state maintained for mmacc clustering
@@ -561,11 +572,10 @@ class SoftClusterState:
     def set_weights_win1(self, curr_iter):
         for t in range(curr_iter):
             self.train_data_weights[t] = np.zeros((self.model_num, self.client_num))
-            
-    def set_weights_zero_b(self):
+    
+    def set_weights_zero_model(self, m_idx):
         for t in self.train_data_weights.keys():
-            self.train_data_weights[t][0] = np.ones(self.client_num)
-            self.train_data_weights[t][1] = np.zeros(self.client_num)
+            self.train_data_weights[t][m_idx] = np.zeros(self.client_num)
 
     
 def SoftCluster_data_loader(args, loader_func, device, comm, process_id):
@@ -578,7 +588,7 @@ def SoftCluster_data_loader(args, loader_func, device, comm, process_id):
         cluster_alg = args.concept_drift_algo_arg
         mmacc_delta = 0
         softmax_alpha = 0
-        geni_change_points = {}
+        geni_change_points = None
         
         if 'mmacc' in cluster_alg:
             mmacc_delta = 0.01*float(cluster_alg.split('_')[-1])
@@ -587,10 +597,7 @@ def SoftCluster_data_loader(args, loader_func, device, comm, process_id):
         elif 'softmax' in cluster_alg:
             softmax_alpha = int(cluster_alg.split('_')[-1])
         elif cluster_alg == 'geni':
-            data_path = './../../../data/{}/'.format(args.dataset)
-            with open(data_path + 'change_points', 'r') as cpf:
-                for c, line in enumerate(cpf):
-                    geni_change_points[c] = int(line.strip())
+            geni_change_points = np.loadtxt("./../../../data/changepoints/{0}.cp".format(args.change_points), dtype=np.dtype(int))
 
         sc_state = SoftClusterState(args.client_num_in_total,
                                     args.concept_num,
@@ -602,8 +609,8 @@ def SoftCluster_data_loader(args, loader_func, device, comm, process_id):
             pickle.dump(sc_state, f)
     comm.Barrier()
 
-    # Load data by model. Actually, these training data are ignored by the 
-    # TrainerSoftCluster which instead uses its all_local_data
+    # Load data by model. Actually, these training data are ignored by the TrainerSoftCluster
+    # which instead uses its all_local_data that is partitioned by iteration
     for m in range(args.concept_num):
         args.retrain_data = 'all'
         datasets.append(loader_func(args))
