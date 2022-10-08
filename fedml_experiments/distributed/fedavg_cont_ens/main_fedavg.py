@@ -10,24 +10,29 @@ import setproctitle
 import torch
 import wandb
 import pickle
+import random
 
 # add the FedML root directory to the python path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "../../../")))
 
-from fedml_api.data_preprocessing.sea.data_loader import load_partition_data_sea
+from fedml_api.data_preprocessing.sea.data_loader import load_partition_data_sea, load_all_data_sea
 
-from fedml_api.data_preprocessing.sine.data_loader import load_partition_data_sine
+from fedml_api.data_preprocessing.sine.data_loader import load_partition_data_sine, load_all_data_sine
 
-from fedml_api.data_preprocessing.circle.data_loader import load_partition_data_circle
+from fedml_api.data_preprocessing.circle.data_loader import load_partition_data_circle, load_all_data_circle
 
-from fedml_api.data_preprocessing.MNIST.data_loader_cont import load_partition_data_mnist
+from fedml_api.data_preprocessing.MNIST.data_loader_cont import load_partition_data_mnist, load_all_data_mnist
+
+from fedml_api.data_preprocessing.fmow.data_loader import load_partition_data_fmow, load_all_data_fmow
 
 from fedml_api.model.linear.lr import LogisticRegression
 
 from fedml_api.model.fnn.fnn import FeedForwardNN
 
 from fedml_api.model.cv.cnn import CNN_DropOut
+
+import torchvision
 
 from fedml_api.model.utils import reinitialize
 
@@ -47,7 +52,7 @@ def add_args(parser):
                         help='dataset used for training')
 
     parser.add_argument('--data_dir', type=str, default='./../../../data/cifar10',
-                        help='data directory')
+                        help='data directory')                       
 
     parser.add_argument('--client_num_in_total', type=int, default=1000, metavar='NN',
                         help='number of workers in a distributed cluster')
@@ -75,7 +80,7 @@ def add_args(parser):
     parser.add_argument('--is_mobile', type=int, default=0,
                         help='whether the program is running on the FedML-Mobile server side')
 
-    parser.add_argument('--frequency_of_the_test', type=int, default=5,
+    parser.add_argument('--frequency_of_the_test', type=int, default=1,
                         help='the frequency of the algorithms')
 
     parser.add_argument('--gpu_server_num', type=int, default=1,
@@ -116,9 +121,19 @@ def add_args(parser):
 
     parser.add_argument('--change_points', type=str, default='',
                         help='Specify change point matrix (a filename in data dir)')
+
+    parser.add_argument('--time_stretch', type=int, default=1,
+                        help='change points are stretched out by this multiplicative factor')                        
                         
     parser.add_argument('--reset_models', type=int, default=0,
                         help='If the model parameters should be reset between train iterations')
+    
+    # this parameter is unused after prepare_data but included here to log on wandb
+    parser.add_argument('--noise_prob', type=float, default=0,
+                        help='label of a sample is swapped with this probability')
+                        
+    parser.add_argument('--dummy_arg', type=int, default=0,
+                        help='this does nothing')
 
     args = parser.parse_args()
     return args
@@ -129,36 +144,62 @@ def load_data_by_dataset(args):
 
     if dataset_name == "sea":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
                                             args.client_num_in_total, args.retrain_data)
         feature_num = 3
 
     elif dataset_name == "sine":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sine(args.batch_size, args.curr_train_iteration,
                                              args.client_num_in_total, args.retrain_data)
         feature_num = 2
 
     elif dataset_name == "circle":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_circle(args.batch_size, args.curr_train_iteration,
                                                args.client_num_in_total, args.retrain_data)
         feature_num = 2
         
     elif dataset_name == "MNIST":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_mnist(args.batch_size, args.curr_train_iteration,
                                               args.client_num_in_total, args.retrain_data)
         feature_num = 784
+        
+    elif dataset_name == "fmow":
+        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        class_num = load_partition_data_fmow(args.batch_size, args.curr_train_iteration,
+                                             args.client_num_in_total, args.retrain_data, args.data_dir)
+        feature_num = 100
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-               all_data, class_num, feature_num]
+               class_num, feature_num]
     return dataset
+    
+
+def load_all_data_by_dataset(args):
+    dataset_name = args.dataset
+    
+    if dataset_name == "sea":
+        return load_all_data_sea(args.batch_size, args.curr_train_iteration, args.client_num_in_total)
+
+    elif dataset_name == "sine":
+        return load_all_data_sine(args.batch_size, args.curr_train_iteration, args.client_num_in_total)
+
+    elif dataset_name == "circle":
+        return load_all_data_circle(args.batch_size, args.curr_train_iteration, args.client_num_in_total)
+        
+    elif dataset_name == "MNIST":
+        return load_all_data_mnist(args.batch_size, args.curr_train_iteration, args.client_num_in_total)
+        
+    elif dataset_name == "fmow":
+        return load_all_data_fmow(args.batch_size, args.curr_train_iteration, args.client_num_in_total, args.data_dir)
 
 
 def create_model(args, model_name, output_dim, feature_dim):
@@ -173,6 +214,10 @@ def create_model(args, model_name, output_dim, feature_dim):
     if model_name == "cnn":
         logging.info("CNN_DropOut")
         model = CNN_DropOut()
+    if model_name == "densenet":
+        model = torchvision.models.densenet121(pretrained=True)
+    if model_name == "resnet":
+        model = torchvision.models.resnet18(pretrained=True)
     reinitialize(model)
     return model
 
@@ -208,7 +253,7 @@ if __name__ == "__main__":
     # previous runs so that initialization bugs will be found at runtime 
     comm.Barrier()
     if args.curr_train_iteration == 0 and process_id == 0:
-        filenames = ['model_params.pt', 'ds_state.pkl', 'mm_state.pkl', 'sc_state.pkl']
+        filenames = ['model_params.pt', 'ds_state.pkl', 'mm_state.pkl', 'sc_state.pkl', 'ada_state.pkl', 'kue_state.pkl']
         for f in filenames:
             if os.path.exists(f):
                 os.remove(f)
@@ -245,8 +290,9 @@ if __name__ == "__main__":
     # Set the random seed. The np.random seed determines the dataset partition.
     # The torch_manual_seed determines the initial weight.
     # We fix these two, so that we can reproduce the result.
-    np.random.seed(0)
-    torch.manual_seed(10)
+    #np.random.seed(0)
+    #torch.manual_seed(10)
+    #random.seed(0)
 
     # GPU arrangement: Please customize this function according your own topology.
     # The GPU server list is configured at "mpi_host_file".
@@ -263,6 +309,8 @@ if __name__ == "__main__":
     # load data
     datasets = FedML_FedAvgEns_data_loader(args, load_data_by_dataset,
                                            device, comm, process_id)
+    all_data = load_all_data_by_dataset(args)
+                                           
     #dataset = load_data(args)
     #[train_data_num, test_data_num, train_data_global, test_data_global,
     # train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
@@ -278,19 +326,33 @@ if __name__ == "__main__":
                                    feature_dim = feature_num))
 
     # load params among the prev existing models
-    # right now, load models in same order they were saved
-    # TODO: generalize to the proper permutation. This code is wrong for AUE.
     if args.curr_train_iteration != 0 and not args.reset_models:
         model_params = torch.load('model_params.pt')
-        for m_idx, p in model_params.items():
-            models[m_idx].load_state_dict(p)
         
-        # hard code a special case for mm-variants and 2 concepts:
+        # special case for mm-variants and 2 concepts:
         # after all clients finish transition A->B, only load params of model B
         if args.concept_drift_algo in {"mmacc", "mmgeni", "mmgeniex"} and \
             len(models) == 1 and len(model_params) == 2:
                 models[0].load_state_dict(model_params[1])
+        
+        # AUE: circular
+        elif args.concept_drift_algo in {"aue", "auepc"}:
+            for m_idx in range(1, len(models)):
+                models[m_idx].load_state_dict(model_params[m_idx-1])
+        
+        # for driftsurf, handled separately by the aggregator
+        elif args.concept_drift_algo == "driftsurf":
+            pass
+        
+        elif args.concept_drift_algo == "clusterfl":
+            # this is obsolete. instead should use the softcluster algo with the cfl arg
+            pass
+        
+        # general case: load models in same order they were saved
+        else:
+            for m_idx, p in model_params.items():
+                models[m_idx].load_state_dict(p)
 
     # start "federated averaging (FedAvg) with ensembled" for this round
     FedML_FedAvgEns_distributed(process_id, worker_number, device, comm,
-                                models, datasets, class_num, args)
+                                models, datasets, all_data, class_num, args)

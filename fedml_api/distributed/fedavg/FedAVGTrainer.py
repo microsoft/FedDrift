@@ -2,6 +2,7 @@ import logging
 
 import torch
 from torch import nn
+import numpy as np
 
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list
 
@@ -42,23 +43,19 @@ class FedAVGTrainer(object):
         self.model.to(self.device)
         # change to train mode
         self.model.train()
-
-        epoch_loss = []
-        for epoch in range(self.args.epochs):
-            batch_loss = []
-            for batch_idx, (x, labels) in enumerate(self.train_local):
-                # logging.info(images.shape)
-                x, labels = x.to(self.device), labels.to(self.device)
-                self.optimizer.zero_grad()
-                log_probs = self.model(x)
-                loss = self.criterion(log_probs, labels)
-                loss.backward()
-                self.optimizer.step()
-                batch_loss.append(loss.item())
-            if len(batch_loss) > 0:
-                epoch_loss.append(sum(batch_loss) / len(batch_loss))
-                logging.info('(client {}. Local Training Epoch: {} \tLoss: {:.6f}'.format(self.client_index,
-                                                                epoch, sum(epoch_loss) / len(epoch_loss)))
+        
+        
+        batch_loss = []
+        for step in range(self.args.epochs):
+            batch_idx = np.random.choice(len(self.train_local))
+            (x, labels) = self.train_local[batch_idx]
+            x, labels = x.to(self.device), labels.to(self.device)
+            self.optimizer.zero_grad()
+            log_probs = self.model(x)
+            loss = self.criterion(log_probs, labels)
+            loss.backward()
+            self.optimizer.step()
+            batch_loss.append(loss.item())
 
         weights = self.model.cpu().state_dict()
 

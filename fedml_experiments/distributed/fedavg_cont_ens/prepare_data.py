@@ -27,7 +27,10 @@ def add_args(parser):
 
     parser.add_argument('--data_dir', type=str, default='./../../../data/cifar10',
                         help='data directory')
-
+                        
+    parser.add_argument('--sample_num', type=int, default=500,
+                        help='number of samples per client per iter')  
+                                                    
     parser.add_argument('--partition_method', type=str, default='hetero', metavar='N',
                         help='how to partition the dataset on local workers')
 
@@ -35,7 +38,7 @@ def add_args(parser):
                         help='number of workers in a distributed cluster')
 
     parser.add_argument('--client_num_per_round', type=int, default=4, metavar='NN',
-                        help='number of workers')
+                        help='number of workers')                  
 
     parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -48,6 +51,12 @@ def add_args(parser):
 
     parser.add_argument('--change_points', type=str, default='',
                         help='Specify change point matrix (a filename in data dir)')
+                        
+    parser.add_argument('--time_stretch', type=int, default=1,
+                        help='change points are stretched out by this multiplicative factor')
+                        
+    parser.add_argument('--noise_prob', type=float, default=0,
+                        help='label of a sample is swapped with this probability')
     
     args = parser.parse_args()
     return args
@@ -57,22 +66,22 @@ def prepare_data(args, dataset_name):
     logging.info("generate_data. dataset_name = %s" % dataset_name)
     if dataset_name == "sea":
         generate_data_sea(args.train_iteration, args.client_num_in_total,
-                          args.drift_together, args.change_points)
+                          args.drift_together, args.sample_num, args.noise_prob, args.time_stretch, args.change_points)
 
     elif dataset_name == "sine":
         logging.info("generate_data. dataset_name = %s" % dataset_name)
         generate_data_sine(args.train_iteration, args.client_num_in_total,
-                           args.drift_together, args.change_points)
+                           args.drift_together, args.sample_num, args.noise_prob, args.time_stretch, args.change_points)
 
     elif dataset_name == "circle":
         logging.info("generate_data. dataset_name = %s" % dataset_name)
         generate_data_circle(args.train_iteration, args.client_num_in_total,
-                             args.drift_together, args.change_points)
+                             args.drift_together, args.sample_num, args.noise_prob, args.time_stretch, args.change_points)
     
     elif dataset_name == "MNIST":
         logging.info("generate_data. dataset_name = %s" % dataset_name)
         generate_data_mnist(args.train_iteration, args.client_num_in_total,
-                            args.drift_together, args.change_points)
+                            args.drift_together, args.sample_num, args.noise_prob, args.time_stretch, args.change_points)
         
     return
 
