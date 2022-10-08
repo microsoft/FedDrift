@@ -22,11 +22,15 @@ from fedml_api.data_preprocessing.circle.data_loader import load_partition_data_
 
 from fedml_api.data_preprocessing.MNIST.data_loader_cont import load_partition_data_mnist
 
+from fedml_api.data_preprocessing.fmow.data_loader import load_partition_data_fmow
+
 from fedml_api.model.linear.lr import LogisticRegression
 
 from fedml_api.model.fnn.fnn import FeedForwardNN
 
 from fedml_api.model.cv.cnn import CNN_DropOut
+
+import torchvision
 
 from fedml_api.model.utils import reinitialize
 
@@ -100,6 +104,22 @@ def add_args(parser):
 
     parser.add_argument('--retrain_data', type=str, default='all',
                         help='which data to be included for retraining')
+    
+    parser.add_argument('--change_points', type=str, default='',
+                        help='Specify change point matrix (a filename in data dir)')
+
+    parser.add_argument('--time_stretch', type=int, default=1,
+                        help='change points are stretched out by this multiplicative factor')      
+                        
+    parser.add_argument('--reset_models', type=int, default=0,
+                        help='If the model parameters should be reset between train iterations')
+    
+    # this parameter is unused after prepare_data but included here to log on wandb
+    parser.add_argument('--noise_prob', type=float, default=0,
+                        help='label of a sample is swapped with this probability')
+                        
+    parser.add_argument('--dummy_arg', type=int, default=0,
+                        help='this does nothing')
 
     args = parser.parse_args()
     return args
@@ -107,38 +127,45 @@ def add_args(parser):
 
 def load_data(args, dataset_name):
     logging.info("load_data. dataset_name = %s" % dataset_name)
-    
-    if dataset_name == "sea":        
+
+    if dataset_name == "sea":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sea(args.batch_size, args.curr_train_iteration,
                                             args.client_num_in_total, args.retrain_data)
         feature_num = 3
 
     elif dataset_name == "sine":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_sine(args.batch_size, args.curr_train_iteration,
                                              args.client_num_in_total, args.retrain_data)
         feature_num = 2
 
     elif dataset_name == "circle":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_circle(args.batch_size, args.curr_train_iteration,
                                                args.client_num_in_total, args.retrain_data)
         feature_num = 2
-    
+        
     elif dataset_name == "MNIST":
         client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
-        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, all_data, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
         class_num = load_partition_data_mnist(args.batch_size, args.curr_train_iteration,
                                               args.client_num_in_total, args.retrain_data)
         feature_num = 784
+        
+    elif dataset_name == "fmow":
+        client_num, train_data_num, test_data_num, train_data_global, test_data_global, \
+        train_data_local_num_dict, train_data_local_dict, test_data_local_dict, \
+        class_num = load_partition_data_fmow(args.batch_size, args.curr_train_iteration,
+                                             args.client_num_in_total, args.retrain_data, args.data_dir)
+        feature_num = 100
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-               all_data, class_num, feature_num]
+               class_num, feature_num]
     return dataset
 
 
@@ -154,6 +181,10 @@ def create_model(args, model_name, output_dim, feature_dim):
     if model_name == "cnn":
         logging.info("CNN_DropOut")
         model = CNN_DropOut()
+    if model_name == "densenet":
+        model = torchvision.models.densenet121(pretrained=True)
+    if model_name == "resnet":
+        model = torchvision.models.resnet18(pretrained=True)
     reinitialize(model)
     return model
 
@@ -217,8 +248,8 @@ if __name__ == "__main__":
     # Set the random seed. The np.random seed determines the dataset partition.
     # The torch_manual_seed determines the initial weight.
     # We fix these two, so that we can reproduce the result.
-    np.random.seed(0)
-    torch.manual_seed(10)
+    #np.random.seed(0)
+    #torch.manual_seed(10)
 
     # GPU arrangement: Please customize this function according your own topology.
     # The GPU server list is configured at "mpi_host_file".
@@ -236,12 +267,17 @@ if __name__ == "__main__":
     dataset = load_data(args, args.dataset)
     [train_data_num, test_data_num, train_data_global, test_data_global,
      train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-     all_data, class_num, feature_num] = dataset
+     class_num, feature_num] = dataset
 
     # create model.
     # Note if the model is DNN (e.g., ResNet), the training will be very slow.
     model = create_model(args, model_name=args.model, output_dim=class_num,
                          feature_dim = feature_num)
+                         
+    # load params from existing model
+    if args.curr_train_iteration != 0 and not args.reset_models:
+        model_params = torch.load('model_params.pt')
+        model.load_state_dict(model_params)
 
     # start "federated averaging (FedAvg)" for this round
     FedML_FedAvg_distributed(process_id, worker_number, device, comm,

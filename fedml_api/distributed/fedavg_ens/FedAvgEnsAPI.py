@@ -6,13 +6,19 @@ from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorDriftSurf import FedAvg
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorMultiModelAcc import FedAvgEnsAggregatorMultiModelAcc
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorClusterFL import FedAvgEnsAggregatorClusterFL
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorSoftCluster import FedAvgEnsAggregatorSoftCluster
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorAda import FedAvgEnsAggregatorAda
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorExp import FedAvgEnsAggregatorExp
+from fedml_api.distributed.fedavg_ens.FedAvgEnsAggregatorKue import FedAvgEnsAggregatorKue
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainer import FedAvgEnsTrainer
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerClusterFL import FedAvgEnsTrainerClusterFL
 from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerSoftCluster import FedAvgEnsTrainerSoftCluster
+from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerAda import FedAvgEnsTrainerAda
+from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerExp import FedAvgEnsTrainerExp
+from fedml_api.distributed.fedavg_ens.FedAvgEnsTrainerKue import FedAvgEnsTrainerKue
 from fedml_api.distributed.fedavg_ens.FedAvgEnsClientManager import FedAvgEnsClientManager
 from fedml_api.distributed.fedavg_ens.FedAvgEnsServerManager import FedAvgEnsServerManager
 
-from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AUE_data_loader, DriftSurf_data_loader, MultiModelAcc_data_loader, MultiModelGeni_data_loader, MultiModelGeniEx_data_loader, ClusterFL_data_loader, SoftCluster_data_loader
+from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AUE_data_loader, DriftSurf_data_loader, MultiModelAcc_data_loader, MultiModelGeni_data_loader, MultiModelGeniEx_data_loader, ClusterFL_data_loader, SoftCluster_data_loader, Ada_data_loader, Exp_data_loader, Kue_data_loader
 
 
 def FedML_init():
@@ -42,10 +48,19 @@ def FedML_FedAvgEns_data_loader(args, loader_func, device, comm, process_id):
     elif args.concept_drift_algo in {"softcluster", "softclusterwin-1", "softclusterreset"}:
         return SoftCluster_data_loader(args, loader_func, device,
                                        comm, process_id)
+    elif args.concept_drift_algo == "ada":
+        return Ada_data_loader(args, loader_func, device,
+                               comm, process_id)
+    elif args.concept_drift_algo == "exp":
+        return Exp_data_loader(args, loader_func, device,
+                               comm, process_id)
+    elif args.concept_drift_algo == "kue":
+        return Kue_data_loader(args, loader_func, device,
+                               comm, process_id)
 
 
 def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
-                                datasets, class_num, args):
+                                datasets, all_data, class_num, args):                    
     train_data_nums = []
     test_data_nums = []
     train_data_globals = []
@@ -56,7 +71,7 @@ def FedML_FedAvgEns_distributed(process_id, worker_number, device, comm, models,
     for ds in datasets:
         [train_data_num, test_data_num, train_data_global, test_data_global,
          train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
-         all_data, class_num, feature_num] = ds
+         class_num, feature_num] = ds
         train_data_nums.append(train_data_num)
         test_data_nums.append(test_data_num)
         train_data_globals.append(train_data_globals)
@@ -104,6 +119,18 @@ def init_server(args, device, comm, rank, size, models, train_data_nums, train_d
         aggregator = FedAvgEnsAggregatorSoftCluster(train_data_globals, test_data_globals, train_data_nums,
                                                     train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
                                                     device, models, class_num, args)
+    elif args.concept_drift_algo == "ada":
+        aggregator = FedAvgEnsAggregatorAda(train_data_globals, test_data_globals, train_data_nums,
+                                            train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
+                                            device, models, class_num, args)
+    elif args.concept_drift_algo == "exp":
+        aggregator = FedAvgEnsAggregatorExp(train_data_globals, test_data_globals, train_data_nums,
+                                            train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
+                                            device, models, class_num, args)
+    elif args.concept_drift_algo == "kue":
+        aggregator = FedAvgEnsAggregatorKue(train_data_globals, test_data_globals, train_data_nums,
+                                            train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts, all_data, worker_num,
+                                            device, models, class_num, args)
     else:
         raise NameError('concept_drift_algo')
 
@@ -122,9 +149,18 @@ def init_client(args, device, comm, process_id, size, models, train_data_nums, t
     if args.concept_drift_algo == "clusterfl":
         trainer = FedAvgEnsTrainerClusterFL(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
                                             device, models, args)
-    if args.concept_drift_algo in {"softcluster", "softclusterwin-1", "softclusterreset"}:
+    elif args.concept_drift_algo in {"softcluster", "softclusterwin-1", "softclusterreset"}:
         trainer = FedAvgEnsTrainerSoftCluster(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
                                    device, models, args)
+    elif args.concept_drift_algo == "ada":
+        trainer = FedAvgEnsTrainerAda(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
+                                      device, models, args)
+    elif args.concept_drift_algo == "exp":
+        trainer = FedAvgEnsTrainerExp(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
+                                      device, models, args)
+    elif args.concept_drift_algo == "kue":
+        trainer = FedAvgEnsTrainerKue(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
+                                      device, models, args)
     else:
         trainer = FedAvgEnsTrainer(client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data,
                                    device, models, args)

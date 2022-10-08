@@ -44,38 +44,60 @@ class FedAvgEnsAggregatorSoftCluster(object):
         return models
 
     def init_sc_state(self):
-        # Load the previous state and models
+        # Load the previous state
         with open('sc_state.pkl', 'rb') as f:
             sc_state = pickle.load(f)
-        
+            
         # Run the clustering at the beginning of the iteration
-        # for now, hardcode type D, which has multiple concepts at time 0
-        if self.args.curr_train_iteration == 0 and self.args.change_points != 'D':
-            sc_state.cluster_init()
+        # assume 1 concept at first iteration
+        
+        if 'H' in self.args.concept_drift_algo_arg:
+            if self.args.curr_train_iteration == 0:
+                sc_state.cluster_init()
+            else:
+                sc_state.cluster_hierarchical(self.args.curr_train_iteration, self.models, self.all_data, self.device)
+        elif 'cfl' in self.args.concept_drift_algo_arg:
+            if self.args.curr_train_iteration == 0:
+                sc_state.cluster_init()
+            else:
+                sc_state.cluster_cfl_init(self.args.curr_train_iteration)
         else:
-            curr_acc = self.train_acc_matrix()
-            
-            # If reset variant, delete models that are not epsilon-better than the rest
-            if self.args.concept_drift_algo == 'softclusterreset':
-                # if all(curr_acc[1] < curr_acc[0] + 0.01):
-                deleted_models = []
-                for m in reversed(range(len(self.models))):
-                    rest = np.delete(curr_acc, deleted_models+[m], axis=0)
-                    if rest.shape[0] > 0:
-                        if all(curr_acc[m] < np.max(rest, axis=0) + 0.01):
-                            deleted_models.append(m)
-                            wandb.run.summary["Reset-{}".format(m)] = 1
-                            sc_state.set_weights_zero_model(m)
-                            reinitialize(self.models[m])
-                if len(deleted_models) > 0:
-                    curr_acc = self.train_acc_matrix()
-            
-            # Cluster on current accuracy
-            sc_state.cluster(curr_acc, self.args.curr_train_iteration, 0)
-            
-            # If win-1 variant, reset weights of prev iters
-            if self.args.concept_drift_algo == 'softclusterwin-1':
-                sc_state.set_weights_win1(self.args.curr_train_iteration)
+            # hardcoded type D, which has multiple concepts at time 0
+            if self.args.curr_train_iteration == 0 and self.args.change_points != 'D':
+                sc_state.cluster_init()
+            else:          
+                curr_acc = self.train_acc_matrix()
+                
+                # If reset variant, delete models that are not epsilon-better than the rest
+                if self.args.concept_drift_algo == 'softclusterreset':
+                    # if all(curr_acc[1] < curr_acc[0] + 0.01):     # simple case for 2 models
+                    deleted_models = []
+                    for m in reversed(range(len(self.models))):
+                        rest = np.delete(curr_acc, deleted_models+[m], axis=0)
+                        if rest.shape[0] > 0:
+                            if all(curr_acc[m] < np.max(rest, axis=0) + 0.01):
+                                deleted_models.append(m)
+                                wandb.run.summary["Reset-{}".format(m)] = 1
+                                sc_state.set_weights_zero_model(m)
+                                reinitialize(self.models[m])
+                    if len(deleted_models) > 0:
+                        curr_acc = self.train_acc_matrix()
+                
+                # Cluster on current accuracy
+                sc_state.cluster(curr_acc, self.args.curr_train_iteration, 0)
+                
+        # If win-1 variant, reset weights of prev iters
+        if self.args.concept_drift_algo == 'softclusterwin-1':
+            sc_state.set_weights_win1(self.args.curr_train_iteration)
+        
+        # record accuracy at first iteration so that drift detector is initialized
+        if self.args.curr_train_iteration == 0:       
+            for client_idx in range(self.args.client_num_in_total):
+                test_model_idx = sc_state.get_test_model_idx(self.args.curr_train_iteration, client_idx)
+                train_data = self.all_data[client_idx][self.args.curr_train_iteration]
+                train_tot_correct, train_num_sample, train_loss = self._infer(self.models[test_model_idx],
+                                                                              train_data)
+                sc_state.set_acc(client_idx, train_tot_correct/train_num_sample)
         
         return sc_state
 
@@ -98,9 +120,22 @@ class FedAvgEnsAggregatorSoftCluster(object):
         
     def aggregate(self, round_idx):
         start_time = time.time()
+        
+        if 'cfl' in self.args.concept_drift_algo_arg:
+            did_split = self.sc_state.cluster_cfl(self.args.curr_train_iteration, round_idx+1, self.models, self.weights_and_num_samples_dict)
+            if did_split:   
+                # skip this round, since the local updates correspond to an outdated set of models
+                end_time = time.time()
+                logging.info("aggregate time cost: %d" % (end_time - start_time))
+                return self.get_global_model_params()
 
         # Do aggregate for all models one by one
         for m_idx in range(len(self.models)):
+            
+            # For efficiency, don't train a model that is not being used at the current iteration
+            if not any( self.sc_state.get_weights()[self.args.curr_train_iteration][m_idx] ):
+                continue
+            
             model_list = []
             total_weight = 0
 
@@ -111,8 +146,8 @@ class FedAvgEnsAggregatorSoftCluster(object):
                 if weight > 0:
                     if self.args.is_mobile == 1:
                         model = transform_list_to_tensor(model)
-                    model_list.append((weight, model))
-                    total_weight += weight
+                    model_list.append((weight*num_sample, model))
+                    total_weight += weight*num_sample
             
             # Skip the model that has no updates from any client
             if total_weight == 0:
@@ -133,11 +168,12 @@ class FedAvgEnsAggregatorSoftCluster(object):
 
             # update the global model which is cached at the server side
             self.models[m_idx].load_state_dict(averaged_params)
-            
-        # update the clustering every round
-        curr_acc = self.train_acc_matrix()
-        # inflate round_idx by 1 to distinguish from the initial clustering
-        self.sc_state.cluster(curr_acc, self.args.curr_train_iteration, round_idx+1)
+        
+        if self.args.concept_drift_algo_arg == "hard-r":
+            # update the clustering every round
+            curr_acc = self.train_acc_matrix()
+            # inflate round_idx by 1 to distinguish from the initial clustering
+            self.sc_state.cluster(curr_acc, self.args.curr_train_iteration, round_idx+1)
             
         end_time = time.time()
         logging.info("aggregate time cost: %d" % (end_time - start_time))
@@ -169,14 +205,14 @@ class FedAvgEnsAggregatorSoftCluster(object):
             for client_idx in range(self.args.client_num_in_total):
                 test_model_idx = self.sc_state.get_test_model_idx(self.args.curr_train_iteration, client_idx)
                 train_model_idx = test_model_idx
-                # train data
+                
+                # train data (for only the current iter)
+                train_data = self.all_data[client_idx][self.args.curr_train_iteration]
                 train_tot_correct, train_num_sample, train_loss = self._infer(self.models[train_model_idx],
-                                                                              self.train_data_local_dicts[train_model_idx][client_idx])
+                                                                              train_data)
                 train_tot_corrects.append(copy.deepcopy(train_tot_correct))
                 train_num_samples.append(copy.deepcopy(train_num_sample))
                 train_losses.append(copy.deepcopy(train_loss))
-                # Set the training accuracy for each client
-                self.sc_state.set_acc(client_idx, train_tot_correct/train_num_sample)
 
                 # test data
                 test_tot_correct, test_num_sample, test_loss = self._infer(self.models[test_model_idx],
@@ -189,6 +225,21 @@ class FedAvgEnsAggregatorSoftCluster(object):
                                "round": round_idx})
                     wandb.log({"Test/Acc-CL-{}".format(client_idx): test_tot_correct/test_num_sample,
                                "round": round_idx})
+                
+                # # test data over specific digits
+                # if self.args.dataset == 'MNIST':
+                    # test_acc6 = self._infer_class(self.models[test_model_idx],
+                                                  # self.test_data_local_dicts[test_model_idx][client_idx],
+                                                  # 6)
+                    # test_acc9 = self._infer_class(self.models[test_model_idx],
+                                                  # self.test_data_local_dicts[test_model_idx][client_idx],
+                                                  # 9)
+                    # if self.args.report_client == 1:
+                        # wandb.log({"Test/Digit6-CL-{}".format(client_idx): test_acc6,
+                                   # "round": round_idx})
+                        # wandb.log({"Test/Digit9-CL-{}".format(client_idx): test_acc9,
+                                   # "round": round_idx})
+                    
 
                 """
                 Note: CI environment is CPU-based computing. 
@@ -250,3 +301,30 @@ class FedAvgEnsAggregatorSoftCluster(object):
                 test_total += target.size(0)
 
         return test_acc, test_total, test_loss
+     
+    # accuracy of model on only the test_data with the class_label
+    def _infer_class(self, model, test_data, class_label):
+        model.eval()
+        model.to(self.device)
+
+        test_loss = test_acc = test_total = 0.
+        criterion = nn.CrossEntropyLoss().to(self.device)
+        with torch.no_grad():
+            for batch_idx, (x, target) in enumerate(test_data):
+                x = x.to(self.device)
+                target = target.to(self.device)
+                pred = model(x)
+                loss = criterion(pred, target)
+                _, predicted = torch.max(pred, -1)
+                
+                correct_pred = predicted.eq(target)
+                index_class = torch.where(target == class_label, True, False)
+                correct_pred_class = torch.masked_select(correct_pred, index_class)
+                
+                test_acc += correct_pred_class.sum().item()
+                test_total += index_class.sum().item()
+        
+        if test_total == 0:
+            return -1
+        else:
+            return test_acc/test_total

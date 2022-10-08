@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import pandas as pd
+from scipy.stats import poisson
 
 def load_retrain_table_data(data_path, num_client, current_train_iteration,
                             csv_file_name, retrain_method):
@@ -61,6 +62,16 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
                                        csv_file_name.format(c, it))
                 train_data[c] = train_data[c].append(train_df,
                                                      ignore_index=True)
+    elif retrain_method.startswith("poisson"):
+        # Win-1 training, but poisson(1) subsampling
+        for c in range(num_client):
+            train_df = pd.read_csv(data_path +
+                                   csv_file_name.format(c, current_train_iteration))
+            weights = poisson.rvs(mu=1, size=train_df.shape[0])
+            if sum(weights) != 0:
+                train_df = train_df.sample(frac=1, replace=True, weights=weights)
+            train_data[c] = train_data[c].append(train_df,
+                                                 ignore_index=True)
     else:
         raise NameError(retrain_method)
             
@@ -72,6 +83,7 @@ def load_retrain_table_data(data_path, num_client, current_train_iteration,
         test_data.append(test_df)                    
 
     return train_data, test_data
+
 
 def load_all_data(data_path, num_client, current_train_iteration, csv_file_name):
     return [ [ pd.read_csv(data_path + csv_file_name.format(c, it)) 

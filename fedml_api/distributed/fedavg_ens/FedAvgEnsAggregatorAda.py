@@ -9,10 +9,10 @@ import pickle
 from torch import nn
 
 from fedml_api.distributed.fedavg.utils import transform_list_to_tensor, transform_tensor_to_list
-from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import DriftSurfState
+from fedml_api.distributed.fedavg_ens.FedAvgEnsDataLoader import AdaState
 
 
-class FedAvgEnsAggregatorDriftSurf(object):
+class FedAvgEnsAggregatorAda(object):
     def __init__(self, train_globals, test_globals, all_train_data_nums,
                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
                  all_data, worker_num, device, models, class_num, args):
@@ -34,7 +34,15 @@ class FedAvgEnsAggregatorDriftSurf(object):
         for idx in range(self.worker_num):
             self.flag_client_model_uploaded_dict[idx] = False
         self.models = self.init_model(models)
-        self.ds_state = self.init_ds_state()
+        self.ada_state = self.init_ada_state()
+        
+        if args.concept_drift_algo_arg.split('_')[1] == 'round':
+            self.update_each_round = True
+        elif args.concept_drift_algo_arg.split('_')[1] == 'iter':
+            self.update_each_round = False
+        else:
+            raise NameError('ada config')
+        
 
     def init_model(self, models):
         for m in models:
@@ -42,26 +50,11 @@ class FedAvgEnsAggregatorDriftSurf(object):
         # logging.info(model)
         return models
 
-    def init_ds_state(self):
-        # Load the previous state and models
-        with open('ds_state.pkl', 'rb') as f:
-            ds_state = pickle.load(f)
-            
-        # Reuse model parameters from previous iteration
-        if self.args.curr_train_iteration != 0 and not self.args.reset_models:
-            for idx, key in enumerate(ds_state.get_train_keys()):
-                m = ds_state.models[key]
-                if m is not None:
-                    self.models[idx].load_state_dict(m.state_dict())
-            
-        # Assign models to the ones that are being trained
-        for idx, key in enumerate(ds_state.get_train_keys()):
-            ds_state.set_model(key, self.models[idx])
-            if key == ds_state.get_model_key():
-                self.test_model_idx = idx
-                print('Test model index {}'.format(self.test_model_idx)) #DEBUG
-
-        return ds_state
+    def init_ada_state(self):
+        # Load the previous state
+        with open('ada_state.pkl', 'rb') as f:
+            ada_state = pickle.load(f)
+        return ada_state
 
     def get_global_model_params(self):
         model_params = [model.state_dict() for model in self.models]
@@ -79,7 +72,7 @@ class FedAvgEnsAggregatorDriftSurf(object):
         for idx in range(self.worker_num):
             self.flag_client_model_uploaded_dict[idx] = False
         return True
-
+        
     def aggregate(self, round_idx):
         start_time = time.time()
 
@@ -90,10 +83,11 @@ class FedAvgEnsAggregatorDriftSurf(object):
 
             for idx in range(self.worker_num):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
-                if self.args.is_mobile == 1:
-                    model = transform_list_to_tensor(model)
-                model_list.append((num_sample, model))
-                training_num += num_sample
+                if num_sample > 0:
+                    if self.args.is_mobile == 1:
+                        model = transform_list_to_tensor(model)
+                    model_list.append((num_sample, model))
+                    training_num += num_sample
 
             #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
@@ -110,12 +104,19 @@ class FedAvgEnsAggregatorDriftSurf(object):
 
             # update the global model which is cached at the server side
             self.models[m_idx].load_state_dict(averaged_params)
-
-        # Save DS state
-        if round_idx > (self.args.comm_round - 5):
-            self.ds_state.move_model_to_cpu()
-            with open('ds_state.pkl','wb') as f:
-                pickle.dump(self.ds_state, f)
+            
+            
+            # update the learning rate
+            theta = np.array([])
+            for (k,v) in averaged_params.items():
+                theta = np.append(theta, v.numpy().flatten())
+            
+            if self.update_each_round:
+                t = round_idx + self.args.curr_train_iteration*self.args.comm_round
+                self.ada_state.update(theta, t)
+            else:
+                if round_idx == self.args.comm_round - 5:
+                    self.ada_state.update(theta, self.args.curr_train_iteration)
             
         end_time = time.time()
         logging.info("aggregate time cost: %d" % (end_time - start_time))
@@ -132,7 +133,7 @@ class FedAvgEnsAggregatorDriftSurf(object):
         return client_indexes
 
     def extra_info(self, round_idx):
-        return None
+        return {'lr': self.ada_state.current_lr()}
 
     def test_on_all_clients(self, round_idx):
         if round_idx % self.args.frequency_of_the_test == 0 or round_idx == self.args.comm_round - 1:
@@ -145,16 +146,18 @@ class FedAvgEnsAggregatorDriftSurf(object):
             test_tot_corrects = []
             test_losses = []
             for client_idx in range(self.args.client_num_in_total):
+                train_model_idx = 0
+                test_model_idx = 0
                 # train data
-                train_tot_correct, train_num_sample, train_loss = self._infer(self.models[self.test_model_idx],
-                                                                              self.train_data_local_dicts[0][client_idx])
+                train_tot_correct, train_num_sample, train_loss = self._infer(self.models[train_model_idx],
+                                                                              self.train_data_local_dicts[train_model_idx][client_idx])
                 train_tot_corrects.append(copy.deepcopy(train_tot_correct))
                 train_num_samples.append(copy.deepcopy(train_num_sample))
                 train_losses.append(copy.deepcopy(train_loss))
 
                 # test data
-                test_tot_correct, test_num_sample, test_loss = self._infer(self.models[self.test_model_idx],
-                                                                self.test_data_local_dicts[0][client_idx])
+                test_tot_correct, test_num_sample, test_loss = self._infer(self.models[test_model_idx],
+                                                                           self.test_data_local_dicts[test_model_idx][client_idx])
                 test_tot_corrects.append(copy.deepcopy(test_tot_correct))
                 test_num_samples.append(copy.deepcopy(test_num_sample))
                 test_losses.append(copy.deepcopy(test_loss))
@@ -186,6 +189,12 @@ class FedAvgEnsAggregatorDriftSurf(object):
             wandb.log({"Test/Loss": test_loss, "round": round_idx})
             stats = {'test_acc': test_acc, 'test_loss': test_loss}
             logging.info(stats)
+
+        # Save ada state
+        if round_idx > (self.args.comm_round - 5):
+            with open('ada_state.pkl','wb') as f:
+                pickle.dump(self.ada_state, f)
+
 
     def _infer(self, model, test_data):
         model.eval()

@@ -12,10 +12,16 @@ BATCH_SIZE=$9
 LR=${10}
 DATASET=${11}
 DATA_DIR=${12}
-CI=${13}
-TRAIN_ITER=${14}
-DRIFT_TOGETHER=${15}
-RETRAIN_DATA=${16}
+SAMPLE_NUM=${13}
+NOISE_PROB=${14}
+CI=${15}
+TRAIN_ITER=${16}
+RESET_MODELS=${17}
+DRIFT_TOGETHER=${18}
+RETRAIN_DATA=${19}
+TIME_STRETCH=${20}
+DUMMY_ARG=${21}
+CHANGE_POINTS=${22}
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -27,12 +33,16 @@ hostname > mpi_host_file
 python3 ./prepare_data.py \
   --dataset $DATASET \
   --data_dir $DATA_DIR \
+  --sample_num $SAMPLE_NUM \
+  --noise_prob $NOISE_PROB \
   --partition_method $DISTRIBUTION \
   --client_num_in_total $CLIENT_NUM \
   --client_num_per_round $WORKER_NUM \
   --batch_size $BATCH_SIZE \
   --train_iteration $TRAIN_ITER \
-  --drift_together $DRIFT_TOGETHER
+  --drift_together $DRIFT_TOGETHER \
+  --time_stretch $TIME_STRETCH \
+  --change_points "${CHANGE_POINTS:-rand}"
 
 # Execute the training for one iteration at a time
 # We do this because the FedML framework calls MPI_Abort whenever
@@ -49,6 +59,7 @@ do
            --model $MODEL \
            --dataset $DATASET \
            --data_dir $DATA_DIR \
+           --noise_prob $NOISE_PROB \
            --client_num_in_total $CLIENT_NUM \
            --client_num_per_round $WORKER_NUM \
            --comm_round $ROUND \
@@ -58,8 +69,12 @@ do
            --ci $CI \
            --total_train_iteration $TI \
            --curr_train_iteration $it \
+           --reset_models $RESET_MODELS \
            --drift_together $DRIFT_TOGETHER \
            --report_client 1 \
-           --retrain_data $RETRAIN_DATA
+           --retrain_data $RETRAIN_DATA \
+           --time_stretch $TIME_STRETCH \
+           --dummy_arg $DUMMY_ARG \
+           --change_points "${CHANGE_POINTS:-rand}"
 done
 
