@@ -36,30 +36,35 @@ def batch_data(data, batch_size):
         batched_y = torch.from_numpy(np.asarray(batched_y)).long()
         batch_data.append((batched_x, batched_y))
     return batch_data
+    
+def add_noise(data, noise_prob):
+    n = len(data)
+    for i in range(n):
+        r = np.random.rand(1)[0]
+        if r < noise_prob:
+            true_label = data[i][-1]
+            digits = np.arange(10, dtype=float)
+            digits = np.delete(digits, int(true_label))
+            data[i][-1] = np.random.choice(digits)
 
-def generate_data_mnist(train_iteration, num_client, drift_together,
-                        change_point_str='rand'):
+def generate_data_mnist(train_iteration, num_client, drift_together, sample_per_client_iter,
+                        noise_prob, stretch_factor, change_point_str='rand'):
 
     data_path = "./../../../data/MNIST/"
-
-    # We always use 500 samples per client in each training iteration
-    # TODO: change to variable sample sizes
-    # TODO: generate more clients than requested for client sampling
-    sample_per_client_iter = 500
-    
+   
     # Randomly generate a single change point for each client
     if change_point_str == 'rand':
         if drift_together == 1:
             #cp = np.random.random_sample() * train_iteration
-            cp = np.random.randint(1, train_iteration)
+            cp = np.random.randint(1, train_iteration//stretch_factor)
             change_point_per_client = [cp for c in range(num_client)]
         else:
-            change_point_per_client = [np.random.randint(1, train_iteration)
+            change_point_per_client = [np.random.randint(1, train_iteration//stretch_factor)
                                        for c in range(num_client)]
         
         # matrix of the concept in the training data for each time, client.
         # restricted to concept changes at time step boundary
-        change_point = np.zeros((train_iteration+1, num_client))
+        change_point = np.zeros((train_iteration//stretch_factor + 1, num_client))
         for c in range(num_client):
             t = change_point_per_client[c]
             change_point[t:,c] = 1
@@ -73,12 +78,31 @@ def generate_data_mnist(train_iteration, num_client, drift_together,
     # Generate data for each client/iteration
     for it in range(train_iteration + 1):
         for c in range(num_client):
-            k = change_point[it][c]
+            k = change_point[it//stretch_factor][c]
             train_data = mnist.generate_sample(sample_per_client_iter, k)
+            add_noise(train_data, noise_prob)
             # Save the data as files
             pd.DataFrame(train_data).to_csv(
                 data_path + 'client_{}_iter_{}.csv'.format(c, it),
                 index = False)
+                
+def load_all_data_mnist(batch_size, current_train_iteration, num_client):
+    data_path = "./../../../data/MNIST/"
+    
+    all_data_pd = load_all_data(
+        data_path, num_client, current_train_iteration,
+        'client_{}_iter_{}.csv')
+        
+    all_data = list()
+    
+    for c in range(num_client):        
+        all_data_c = list()
+        for it in range(current_train_iteration + 1):
+            all_data_c.append(batch_data(all_data_pd[c][it], batch_size))
+        all_data.append(all_data_c)
+        
+    return all_data
+    
 
 def load_partition_data_mnist(batch_size, current_train_iteration,
                               num_client, retrain_data):
@@ -89,9 +113,6 @@ def load_partition_data_mnist(batch_size, current_train_iteration,
         data_path, num_client, current_train_iteration,
         'client_{}_iter_{}.csv', retrain_data)
     
-    all_data_pd = load_all_data(
-        data_path, num_client, current_train_iteration,
-        'client_{}_iter_{}.csv')
     
     # Prepare data for FedML
     train_data_num = 0
@@ -101,7 +122,7 @@ def load_partition_data_mnist(batch_size, current_train_iteration,
     train_data_local_num_dict = dict()
     train_data_global = list()
     test_data_global = list()
-    all_data = list()
+    
 
     for c in range(num_client):
         train_data_num += len(train_data[c].index)
@@ -118,18 +139,13 @@ def load_partition_data_mnist(batch_size, current_train_iteration,
             test_batch = batch_data(test_data[c], batch_size)        
             test_data_local_dict[c] = test_batch        
             test_data_global += test_batch
-        
-        all_data_c = list()
-        for it in range(current_train_iteration + 1):
-            all_data_c.append(batch_data(all_data_pd[c][it], batch_size))
-        all_data.append(all_data_c)
             
     client_num = num_client
     class_num = 10
 
     return client_num, train_data_num, test_data_num, train_data_global, \
         test_data_global, train_data_local_num_dict, train_data_local_dict, \
-        test_data_local_dict, all_data, class_num
+        test_data_local_dict, class_num
         
 
 class MNIST_Data:
@@ -158,16 +174,39 @@ class MNIST_Data:
         self.nY = nY
         self.samples_used = 0
 
+    # previously, rotation_k indicated number of CCW 90 deg rotations
+    # now, indicates 1 of 3 different label swappings
     def generate_sample(self, num_sample, rotation_k):
         samples = []
         
+        # if samples run out, repeat them
+        if (self.samples_used + num_sample >= len(self.nX)):
+            self.samples_used = 0
+         
         for i in range(self.samples_used, self.samples_used + num_sample):
             x = self.nX[i]
             y = self.nY[i]
             if rotation_k != 0:
-                x2d = np.reshape(x, (28, 28))
-                rx2d = np.rot90(x2d, k=rotation_k)
-                x = rx2d.flatten()
+                # x2d = np.reshape(x, (28, 28))
+                # rx2d = np.rot90(x2d, k=rotation_k)
+                # x = rx2d.flatten()
+                
+                if rotation_k == 1:
+                    if y == 1.:
+                        y = 2.
+                    elif y == 2.:
+                        y = 1.
+                elif rotation_k == 2:
+                    if y == 3.:
+                        y = 4.
+                    elif y == 4.:
+                        y = 3.
+                elif rotation_k == 3:
+                    if y == 5.:
+                        y = 6.
+                    elif y == 6.:
+                        y = 5.
+                
             samples.append(np.concatenate((x, [y])))
         
         self.samples_used += num_sample
@@ -175,17 +214,24 @@ class MNIST_Data:
         return samples
 
 def main():
+    generate_data_mnist(3, 3, 0, 100, 1.0, 1)
     
-    mnist = MNIST_Data()
+    # mnist = MNIST_Data()
 
-    ex = mnist.nX[0]
-    shifted_x = (ex - min(ex))/(max(ex)-min(ex))
-    x_2d = np.reshape(shifted_x, (28, 28))
-    x_2d_rot = np.rot90(x_2d, k=2)
-    img = Image.fromarray(np.uint8(x_2d*255), 'L')
-    img_rot = Image.fromarray(np.uint8(x_2d_rot*255), 'L')
-    img.show()
-    img_rot.show()
+    # ex = mnist.nX[0]
+    # shifted_x = (ex - min(ex))/(max(ex)-min(ex))
+    # x_2d = np.reshape(shifted_x, (28, 28))
+    # x_2d_rot = np.rot90(x_2d, k=2)
+    # img = Image.fromarray(np.uint8(x_2d*255), 'L')
+    # img_rot = Image.fromarray(np.uint8(x_2d_rot*255), 'L')
+    # img.show()
+    # img_rot.show()
+    
+    # counts = np.zeros((10))
+    # for y in mnist.nY:
+        # counts[int(y)] += 1
+    # counts = counts/sum(counts)
+    # print(counts)
     
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import logging
+import torch
 
 from fedml_api.distributed.fedavg.message_define import MyMessage
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list
@@ -44,6 +45,7 @@ class FedAVGServerManager(ServerManager):
             # start the next round
             self.round_idx += 1
             if self.round_idx == self.round_num:
+                self.save_model_params(global_model_params)
                 self.finish()
                 return
 
@@ -70,3 +72,6 @@ class FedAVGServerManager(ServerManager):
         message.add_params(MyMessage.MSG_ARG_KEY_MODEL_PARAMS, global_model_params)
         message.add_params(MyMessage.MSG_ARG_KEY_CLIENT_INDEX, str(client_index))
         self.send_message(message)
+
+    def save_model_params(self, global_model_params):
+        torch.save(global_model_params, 'model_params.pt')

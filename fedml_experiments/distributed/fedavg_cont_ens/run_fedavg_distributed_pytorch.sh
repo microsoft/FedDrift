@@ -12,14 +12,18 @@ BATCH_SIZE=$9
 LR=${10}
 DATASET=${11}
 DATA_DIR=${12}
-CI=${13}
-TRAIN_ITER=${14}
-CONCEPT_NUM=${15}
-RESET_MODELS=${16}
-DRIFT_TOGETHER=${17}
-CL_ALGO=${18}
-CL_ALGO_ARG=${19}
-CHANGE_POINTS=${20}
+SAMPLE_NUM=${13}
+NOISE_PROB=${14}
+CI=${15}
+TRAIN_ITER=${16}
+CONCEPT_NUM=${17}
+RESET_MODELS=${18}
+DRIFT_TOGETHER=${19}
+CL_ALGO=${20}
+CL_ALGO_ARG=${21}
+TIME_STRETCH=${22}
+DUMMY_ARG=${23}
+CHANGE_POINTS=${24}
 
 PROCESS_NUM=`expr $WORKER_NUM + 1`
 echo $PROCESS_NUM
@@ -31,12 +35,15 @@ hostname > mpi_host_file
 python3 ./prepare_data.py \
   --dataset $DATASET \
   --data_dir $DATA_DIR \
+  --sample_num $SAMPLE_NUM \
+  --noise_prob $NOISE_PROB \
   --partition_method $DISTRIBUTION \
   --client_num_in_total $CLIENT_NUM \
   --client_num_per_round $WORKER_NUM \
   --batch_size $BATCH_SIZE \
   --train_iteration $TRAIN_ITER \
   --drift_together $DRIFT_TOGETHER \
+  --time_stretch $TIME_STRETCH \
   --change_points "${CHANGE_POINTS:-rand}"
 
 # Execute the training for one iteration at a time
@@ -54,6 +61,7 @@ do
            --model $MODEL \
            --dataset $DATASET \
            --data_dir $DATA_DIR \
+           --noise_prob $NOISE_PROB \
            --client_num_in_total $CLIENT_NUM \
            --client_num_per_round $WORKER_NUM \
            --comm_round $ROUND \
@@ -70,6 +78,8 @@ do
            --retrain_data win-1 \
            --concept_drift_algo $CL_ALGO \
            --concept_drift_algo_arg $CL_ALGO_ARG \
-           --change_points "${CHANGE_POINTS}"
+           --time_stretch $TIME_STRETCH \
+           --dummy_arg $DUMMY_ARG \
+           --change_points "${CHANGE_POINTS:-rand}"
 done
 
