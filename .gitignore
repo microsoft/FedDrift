@@ -23,6 +23,9 @@ wandb
 *.txt
 *.h5
 
+*.pt
+mpi_host_file
+
 # data
 *.rar
 *.csv
@@ -32,6 +35,9 @@ cifar-10-batches-py
 *.png
 *.zip
 *.json
+
+!data/fmow/partitions/**/*.csv
+data/fmow/partitions/test*
 
 data/cifar10/*-python
 data/cifar100/*-python
@@ -43,6 +49,11 @@ data/shakespeare/train
 data/shakespeare/test
 data/stackoverflow/datasets
 
+data/circle
+data/sine
+
+data/changepoints/rand.cp
+
 # android
 .gradle
 fedml_mobile/android/.idea
@@ -50,4 +61,4 @@ fedml_mobile/android/app/build
 fedml_mobile/android/fedml-iot-sdk/build
 fedml_mobile/android/build
 
-mimiconda.sh
+miniconda.sh

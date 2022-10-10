@@ -40,6 +40,9 @@ cd ./fedml_mobile/server/executor
 pip install -r requirements.txt
 cd ./../../../
 
+# Install wilds package (still have to download the dataset separately)
+pip install wilds
+
 # install the dataset
 # 1. MNIST
 cd ./data/MNIST

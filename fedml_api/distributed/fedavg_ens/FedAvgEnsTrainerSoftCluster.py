@@ -69,24 +69,17 @@ class FedAvgEnsTrainerSoftCluster(object):
             if not any( self.extra_info['sc_weights'][self.args.curr_train_iteration][mod_idx] ):
                 results[mod_idx] = (None, 0)
                 continue
-
-            local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
             
-            unnorm_probs = np.asarray([self.extra_info['sc_weights'][t][mod_idx][self.client_index] 
-                for t in range(len(self.all_local_data))])
+            unnorm_probs = np.asarray([self.extra_info['sc_weights'][t][mod_idx][self.client_index] * len(self.all_local_data[t])
+                                       for t in range(len(self.all_local_data))]) 
+            local_sample_number = sum(unnorm_probs)
             
-            # Skip the training if there is no training data for this model
-            # or if all training data are weighted 0
-            if local_sample_number == 0 or sum(unnorm_probs) == 0:
+            # Skip the training if all training data are weighted 0
+            if local_sample_number == 0:
                 results[mod_idx] = (None, 0)
                 continue
                 
             probs = unnorm_probs/sum(unnorm_probs)
-            
-            batches = []
-            for t in range(len(self.all_local_data)):
-                if unnorm_probs[t] > 0:
-                    batches += self.all_local_data[t]
             
             model.to(self.device)
             # change to train mode
@@ -95,31 +88,42 @@ class FedAvgEnsTrainerSoftCluster(object):
             optimizer = self.optimizers[mod_idx]
             
             # self._freeze_layers(model)
-                        
-            batch_loss = []
-            for step in range(self.args.epochs):
-                
-                # # case: fractional weights
-                # t_sample = np.random.choice(len(self.all_local_data), p=probs)
-                # data_t = self.all_local_data[t_sample]
-                # if len(data_t) == 0:
-                    # continue
-                # batch_idx = np.random.choice(len(data_t))
-                # (x, labels) = data_t[batch_idx]
-                
-                # case: weights are unit
-                batch_idx = np.random.choice(len(batches))
-                (x, labels) = batches[batch_idx]
-                
-                x, labels = x.to(self.device), labels.to(self.device)
-                optimizer.zero_grad()
-                log_probs = model(x)
-                loss = criterion(log_probs, labels)
-                loss.backward()
-                optimizer.step()
-                batch_loss.append(loss.item())
-                # logging.info('(client {}, Model {}. Local Training Step: {} \tLoss: {:.6f}'.format(
-                    # self.client_index, mod_idx, step, sum(batch_loss) / len(batch_loss)))
+            
+            if all( isinstance(self.all_local_data[t], list) for t in range(len(self.all_local_data)) ):
+                batches = []
+                for t in range(len(self.all_local_data)):
+                    if unnorm_probs[t] > 0:
+                        batches += self.all_local_data[t]
+            
+                for step in range(self.args.epochs):
+                    # # general case: fractional weights
+                    # t_sample = np.random.choice(len(self.all_local_data), p=probs)
+                    # data_t = self.all_local_data[t_sample]
+                    # batch_idx = np.random.choice(len(data_t))
+                    # (x, labels) = data_t[batch_idx]
+                    
+                    # special case: weights are unit
+                    batch_idx = np.random.choice(len(batches))
+                    (x, labels) = batches[batch_idx]
+                    
+                    x, labels = x.to(self.device), labels.to(self.device)
+                    optimizer.zero_grad()
+                    log_probs = model(x)
+                    loss = criterion(log_probs, labels)
+                    loss.backward()
+                    optimizer.step()
+            else:
+                for step in range(self.args.epochs):
+                    t_sample = np.random.choice(len(self.all_local_data), p=probs)
+                    data_t = self.all_local_data[t_sample]
+                    (x, labels) = next(iter(data_t))
+                    
+                    x, labels = x.to(self.device), labels.to(self.device)
+                    optimizer.zero_grad()
+                    log_probs = model(x)
+                    loss = criterion(log_probs, labels)
+                    loss.backward()
+                    optimizer.step()
 
             weights = model.cpu().state_dict()
 
