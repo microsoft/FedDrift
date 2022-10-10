@@ -3,6 +3,7 @@ import torch
 import torchvision
 import torch.utils.data as todata
 from wilds import get_dataset
+from scipy.stats import poisson
 
 def load_all_data_fmow(batch_size, current_train_iteration, num_client, 
                        data_dir, partition_name):
@@ -29,6 +30,10 @@ def load_partition_data_fmow(batch_size, current_train_iteration, num_client,
             train_data = todata.ConcatDataset([ FmowDataset(c, it, data_dir, partition_name) for it in iters ])
         elif len(iters) == 1:
             train_data = FmowDataset(c, iters[0], data_dir, partition_name)
+            if retrain_data.startswith("poisson") and len(train_data) > 1:
+                weights = poisson.rvs(mu=1, size=len(train_data))
+                if sum(weights) != 0:
+                    train_data.subidxs = np.random.choice(train_data.subidxs, size=len(train_data), replace=True, p=weights/sum(weights))
         else:
             train_data = []
         test_data = FmowDataset(c, current_train_iteration+1, data_dir, partition_name)
@@ -41,7 +46,7 @@ def load_partition_data_fmow(batch_size, current_train_iteration, num_client,
         test_data_local_dict[c] = create_dataloader(test_data, batch_size) 
             
     client_num = num_client
-    class_num = 62
+    class_num = 1000 # only 62 in the data, but the pre-trained resnet/densenet will output 1000
 
     return client_num, train_data_num, test_data_num, train_data_global, \
         test_data_global, train_data_local_num_dict, train_data_local_dict, \
@@ -90,7 +95,6 @@ def retrain_iters(retrain_method, client_idx, current_train_iteration):
         client_select_iter = json.loads(retrain_method.replace("clientsel-", ""))
         return client_select_iter[client_idx]
     elif retrain_method.startswith("poisson"):
-        #TODO
-        raise NotImplementedError
+        return [current_train_iteration]
     else:
         raise NameError(retrain_method)

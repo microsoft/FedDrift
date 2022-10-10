@@ -114,8 +114,9 @@ class FedAvgEnsAggregatorAue(object):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
                 if self.args.is_mobile == 1 and num_sample > 0:
                     model = transform_list_to_tensor(model)
-                model_list.append((num_sample, model))
-                training_num += num_sample
+                if num_sample > 0:
+                    model_list.append((num_sample, model))
+                    training_num += num_sample
 
             #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
