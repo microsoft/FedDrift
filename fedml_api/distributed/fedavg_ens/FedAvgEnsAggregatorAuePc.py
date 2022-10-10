@@ -72,7 +72,10 @@ class FedAvgEnsAggregatorAuePc(object):
                 # Always use the most recent batch for MSE
                 mse, sample = self._mse(
                     model, self.train_data_local_dicts[0][client_idx])
-                msei = mse/sample
+                if sample == 0:
+                    msei = 0
+                else:
+                    msei = mse/sample
                 self.ens_weights[client_idx][m_idx] = 1./(mser + msei + \
                                                           FedAvgEnsAggregatorAuePc.EPS)
             # The most recent model gets the "perfect" score
@@ -181,9 +184,9 @@ class FedAvgEnsAggregatorAuePc(object):
                 test_num_samples.append(copy.deepcopy(test_num_sample))
 
                 if self.args.report_client == 1:
-                    wandb.log({"Train/Acc-CL-{}".format(client_idx): train_tot_correct/train_num_sample,
+                    wandb.log({"Train/Acc-CL-{}".format(client_idx): self.reported_acc(train_tot_correct, train_num_sample),
                                "round": round_idx})
-                    wandb.log({"Test/Acc-CL-{}".format(client_idx): test_tot_correct/test_num_sample,
+                    wandb.log({"Test/Acc-CL-{}".format(client_idx): self.reported_acc(test_tot_correct, test_num_sample),
                                "round": round_idx})
 
                 """
@@ -206,6 +209,12 @@ class FedAvgEnsAggregatorAuePc(object):
             wandb.log({"Test/Acc": test_acc, "round": round_idx})
             stats = {'test_acc': test_acc}
             logging.info(stats)
+
+    def reported_acc(self, correct, num_sample):
+        if num_sample == 0:
+            return -1
+        else:
+            return correct/num_sample
 
     def _mse(self, model, test_data):
         model.eval()

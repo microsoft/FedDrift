@@ -97,7 +97,10 @@ class FedAvgEnsAggregatorSoftCluster(object):
                 train_data = self.all_data[client_idx][self.args.curr_train_iteration]
                 train_tot_correct, train_num_sample, train_loss = self._infer(self.models[test_model_idx],
                                                                               train_data)
-                sc_state.set_acc(client_idx, train_tot_correct/train_num_sample)
+                train_acc = 0
+                if train_num_sample != 0:
+                    train_acc = train_tot_correct/train_num_sample
+                sc_state.set_acc(client_idx, train_acc)
         
         return sc_state
 
@@ -140,14 +143,13 @@ class FedAvgEnsAggregatorSoftCluster(object):
             total_weight = 0
 
             for idx in range(self.worker_num):
+                # num_sample returned by the client already factors in the sc_state weights
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
-                weight = sum(self.sc_state.get_weights()[t][m_idx][idx] \
-                             for t in range(0, self.args.curr_train_iteration + 1))
-                if weight > 0:
+                if num_sample > 0:
                     if self.args.is_mobile == 1:
                         model = transform_list_to_tensor(model)
-                    model_list.append((weight*num_sample, model))
-                    total_weight += weight*num_sample
+                    model_list.append((num_sample, model))
+                    total_weight += num_sample
             
             # Skip the model that has no updates from any client
             if total_weight == 0:
@@ -221,9 +223,9 @@ class FedAvgEnsAggregatorSoftCluster(object):
                 test_num_samples.append(copy.deepcopy(test_num_sample))
                 test_losses.append(copy.deepcopy(test_loss))
                 if self.args.report_client == 1:
-                    wandb.log({"Train/Acc-CL-{}".format(client_idx): train_tot_correct/train_num_sample,
+                    wandb.log({"Train/Acc-CL-{}".format(client_idx): self.reported_acc(train_tot_correct, train_num_sample),
                                "round": round_idx})
-                    wandb.log({"Test/Acc-CL-{}".format(client_idx): test_tot_correct/test_num_sample,
+                    wandb.log({"Test/Acc-CL-{}".format(client_idx): self.reported_acc(test_tot_correct, test_num_sample),
                                "round": round_idx})
                 
                 # # test data over specific digits
@@ -268,6 +270,12 @@ class FedAvgEnsAggregatorSoftCluster(object):
         if round_idx > (self.args.comm_round - 5):
             with open('sc_state.pkl','wb') as f:
                 pickle.dump(self.sc_state, f)
+                
+    def reported_acc(self, correct, num_sample):
+        if num_sample == 0:
+            return -1
+        else:
+            return correct/num_sample
                 
     def train_acc_matrix(self):
         acc = np.zeros((len(self.models), self.args.client_num_in_total))

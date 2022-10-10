@@ -151,9 +151,9 @@ class FedAvgEnsAggregatorMultiModelAcc(object):
                 test_num_samples.append(copy.deepcopy(test_num_sample))
                 test_losses.append(copy.deepcopy(test_loss))
                 if self.args.report_client == 1:
-                    wandb.log({"Train/Acc-CL-{}".format(client_idx): train_tot_correct/train_num_sample,
+                    wandb.log({"Train/Acc-CL-{}".format(client_idx): self.reported_acc(train_tot_correct, train_num_sample),
                                "round": round_idx})
-                    wandb.log({"Test/Acc-CL-{}".format(client_idx): test_tot_correct/test_num_sample,
+                    wandb.log({"Test/Acc-CL-{}".format(client_idx): self.reported_acc(test_tot_correct, test_num_sample),
                                "round": round_idx})
 
                 """
@@ -185,6 +185,11 @@ class FedAvgEnsAggregatorMultiModelAcc(object):
             with open('mm_state.pkl','wb') as f:
                 pickle.dump(self.mm_state, f)
 
+    def reported_acc(self, correct, num_sample):
+        if num_sample == 0:
+            return -1
+        else:
+            return correct/num_sample
 
     def _infer(self, model, test_data):
         model.eval()
