@@ -24,6 +24,7 @@ wandb
 *.h5
 
 *.pt
+*.pkl
 mpi_host_file
 
 # data
