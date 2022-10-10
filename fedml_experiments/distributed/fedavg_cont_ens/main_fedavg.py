@@ -176,7 +176,7 @@ def load_data_by_dataset(args):
         class_num = load_partition_data_fmow(args.batch_size, args.curr_train_iteration,
                                              args.client_num_in_total, args.retrain_data, 
                                              args.data_dir, args.change_points)
-        feature_num = 100
+        feature_num = 3*224*224
 
     dataset = [train_data_num, test_data_num, train_data_global, test_data_global,
                train_data_local_num_dict, train_data_local_dict, test_data_local_dict,
