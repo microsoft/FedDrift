@@ -11,7 +11,7 @@ from torch import nn
 from fedml_api.distributed.fedavg.utils import transform_list_to_tensor, transform_tensor_to_list
 
 
-class FedAvgEnsAggregatorExp(object):
+class FedAvgEnsAggregatorVanilla(object):
     def __init__(self, train_globals, test_globals, all_train_data_nums,
                  train_data_local_dicts, test_data_local_dicts, train_data_local_num_dicts,
                  all_data, worker_num, device, models, class_num, args):
@@ -133,9 +133,9 @@ class FedAvgEnsAggregatorExp(object):
                 test_num_samples.append(copy.deepcopy(test_num_sample))
                 test_losses.append(copy.deepcopy(test_loss))
                 if self.args.report_client == 1:
-                    wandb.log({"Train/Acc-CL-{}".format(client_idx): train_tot_correct/train_num_sample,
+                    wandb.log({"Train/Acc-CL-{}".format(client_idx): self.reported_acc(train_tot_correct, train_num_sample),
                                "round": round_idx})
-                    wandb.log({"Test/Acc-CL-{}".format(client_idx): test_tot_correct/test_num_sample,
+                    wandb.log({"Test/Acc-CL-{}".format(client_idx): self.reported_acc(test_tot_correct, test_num_sample),
                                "round": round_idx})
 
                 """
@@ -160,7 +160,12 @@ class FedAvgEnsAggregatorExp(object):
             wandb.log({"Test/Loss": test_loss, "round": round_idx})
             stats = {'test_acc': test_acc, 'test_loss': test_loss}
             logging.info(stats)
-
+            
+    def reported_acc(self, correct, num_sample):
+        if num_sample == 0:
+            return -1
+        else:
+            return correct/num_sample
 
     def _infer(self, model, test_data):
         model.eval()

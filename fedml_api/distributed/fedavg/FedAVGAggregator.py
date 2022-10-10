@@ -71,6 +71,8 @@ class FedAVGAggregator(object):
         for k in averaged_params.keys():
             for i in range(0, len(model_list)):
                 local_sample_number, local_model_params = model_list[i]
+                if local_sample_number == 0:
+                    continue
                 w = local_sample_number / training_num
                 if i == 0:
                     averaged_params[k] = local_model_params[k] * w
@@ -118,9 +120,9 @@ class FedAVGAggregator(object):
                 test_losses.append(copy.deepcopy(test_loss))
 
                 if self.args.report_client == 1:
-                    wandb.log({"Train/Acc-CL-{}".format(client_idx): train_tot_correct/train_num_sample,
+                    wandb.log({"Train/Acc-CL-{}".format(client_idx): self.reported_acc(train_tot_correct, train_num_sample),
                                "round": round_idx})
-                    wandb.log({"Test/Acc-CL-{}".format(client_idx): test_tot_correct/test_num_sample,
+                    wandb.log({"Test/Acc-CL-{}".format(client_idx): self.reported_acc(test_tot_correct, test_num_sample), 
                                "round": round_idx})
 
                 """
@@ -145,7 +147,13 @@ class FedAVGAggregator(object):
             wandb.log({"Test/Loss": test_loss, "round": round_idx})
             stats = {'test_acc': test_acc, 'test_loss': test_loss}
             logging.info(stats)
-
+    
+    def reported_acc(self, correct, num_sample):
+        if num_sample == 0:
+            return -1
+        else:
+            return correct/num_sample
+    
     def _infer(self, test_data):
         self.model.eval()
         self.model.to(self.device)

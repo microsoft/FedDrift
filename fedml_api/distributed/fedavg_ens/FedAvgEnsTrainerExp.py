@@ -52,7 +52,9 @@ class FedAvgEnsTrainerExp(object):
             # change to train mode
             model.train()
 
-            local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
+            local_sample_number = sum( len(self.all_local_data[t]) 
+                                       for t in range(len(self.all_local_data)) )
+            
             # Skip the training if there is no training data for this model
             if local_sample_number == 0:
                 results[mod_idx] = (None, 0)
@@ -64,12 +66,17 @@ class FedAvgEnsTrainerExp(object):
             unnorm_probs = np.asarray([ 2**t for t in range(len(self.all_local_data)) ])
             probs = unnorm_probs/sum(unnorm_probs)
 
-            batch_loss = []
             for step in range(self.args.epochs):
                 t_sample = np.random.choice(len(self.all_local_data), p=probs)
                 data_t = self.all_local_data[t_sample]
-                batch_idx = np.random.choice(len(data_t))
-                (x, labels) = data_t[batch_idx]
+                if len(data_t) == 0:
+                    continue
+                    
+                if isinstance(data_t, list):
+                    batch_idx = np.random.choice(len(data_t))
+                    (x, labels) = data_t[batch_idx]
+                elif isinstance(data_t, torch.utils.data.dataloader.DataLoader):
+                    (x, labels) = next(iter(data_t))
                 
                 x, labels = x.to(self.device), labels.to(self.device)
                 optimizer.zero_grad()
@@ -77,9 +84,6 @@ class FedAvgEnsTrainerExp(object):
                 loss = criterion(log_probs, labels)
                 loss.backward()
                 optimizer.step()
-                batch_loss.append(loss.item())
-                # logging.info('(client {}, Model {}. Local Training Step: {} \tLoss: {:.6f}'.format(
-                    # self.client_index, mod_idx, step, sum(batch_loss) / len(batch_loss)))
 
             weights = model.cpu().state_dict()
 

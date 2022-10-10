@@ -40,22 +40,35 @@ class FedAVGTrainer(object):
         self.local_sample_number = self.train_data_local_num_dict[client_index]
 
     def train(self):
+        # Skip the training if there is no training data for this model
+        if self.local_sample_number == 0:
+            return None, 0
+            
         self.model.to(self.device)
         # change to train mode
         self.model.train()
         
-        
-        batch_loss = []
-        for step in range(self.args.epochs):
-            batch_idx = np.random.choice(len(self.train_local))
-            (x, labels) = self.train_local[batch_idx]
-            x, labels = x.to(self.device), labels.to(self.device)
-            self.optimizer.zero_grad()
-            log_probs = self.model(x)
-            loss = self.criterion(log_probs, labels)
-            loss.backward()
-            self.optimizer.step()
-            batch_loss.append(loss.item())
+        if isinstance(self.train_local, list):
+            for step in range(self.args.epochs):
+                batch_idx = np.random.choice(len(self.train_local))
+                (x, labels) = self.train_local[batch_idx]
+                
+                x, labels = x.to(self.device), labels.to(self.device)
+                self.optimizer.zero_grad()
+                log_probs = self.model(x)
+                loss = self.criterion(log_probs, labels)
+                loss.backward()
+                self.optimizer.step()
+        elif isinstance(self.train_local, torch.utils.data.dataloader.DataLoader):
+            for step in range(self.args.epochs):
+                (x, labels) = next(iter(self.train_local))
+                
+                x, labels = x.to(self.device), labels.to(self.device)
+                self.optimizer.zero_grad()
+                log_probs = self.model(x)
+                loss = self.criterion(log_probs, labels)
+                loss.backward()
+                self.optimizer.step()
 
         weights = self.model.cpu().state_dict()
 

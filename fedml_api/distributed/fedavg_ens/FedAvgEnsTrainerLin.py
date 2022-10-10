@@ -7,7 +7,7 @@ import numpy as np
 from fedml_api.distributed.fedavg.utils import transform_tensor_to_list, transform_list_to_tensor
 
 
-class FedAvgEnsTrainerAda(object):
+class FedAvgEnsTrainerLin(object):
     def __init__(self, client_index, train_data_local_dicts, train_data_local_num_dicts, train_data_nums, all_local_data, device, models,
                  args):
         self.client_index = client_index
@@ -25,9 +25,12 @@ class FedAvgEnsTrainerAda(object):
         for m in self.models:
             m.to(self.device)
             self.criterions.append(nn.CrossEntropyLoss().to(self.device))
-            # hard-coded to be SGD, despite the args
-            self.optimizers.append(torch.optim.SGD(m.parameters(), lr=self.args.lr))
-
+            if self.args.client_optimizer == "sgd":
+                self.optimizers.append(torch.optim.SGD(m.parameters(), lr=self.args.lr))
+            else:
+                self.optimizers.append(torch.optim.Adam(filter(lambda p: p.requires_grad, m.parameters()),
+                                                        lr=self.args.lr,
+                                                        weight_decay=self.args.wd, amsgrad=True))
 
     def update_model(self, weights, extra_info):
         # logging.info("update_model. client_index = %d" % self.client_index)
@@ -49,42 +52,38 @@ class FedAvgEnsTrainerAda(object):
             # change to train mode
             model.train()
 
-            local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
+            local_sample_number = sum( len(self.all_local_data[t]) 
+                                       for t in range(len(self.all_local_data)) )
+            
             # Skip the training if there is no training data for this model
             if local_sample_number == 0:
                 results[mod_idx] = (None, 0)
                 continue
 
-            train_local = self.train_data_local_dicts[mod_idx][self.client_index]
             criterion = self.criterions[mod_idx]
             optimizer = self.optimizers[mod_idx]
             
-            # use the learning rate that the server determined
-            with torch.no_grad():
-                for g in optimizer.param_groups:
-                    g['lr'] = self.extra_info['lr']
+            unnorm_probs = np.asarray([ t+1 for t in range(len(self.all_local_data)) ])
+            probs = unnorm_probs/sum(unnorm_probs)
 
-            if isinstance(train_local, list):
-                for step in range(self.args.epochs):
-                    batch_idx = np.random.choice(len(train_local))
-                    (x, labels) = train_local[batch_idx]
+            for step in range(self.args.epochs):
+                t_sample = np.random.choice(len(self.all_local_data), p=probs)
+                data_t = self.all_local_data[t_sample]
+                if len(data_t) == 0:
+                    continue
                     
-                    x, labels = x.to(self.device), labels.to(self.device)
-                    optimizer.zero_grad()
-                    log_probs = model(x)
-                    loss = criterion(log_probs, labels)
-                    loss.backward()
-                    optimizer.step()
-            elif isinstance(train_local, torch.utils.data.dataloader.DataLoader):
-                for step in range(self.args.epochs):
-                    (x, labels) = next(iter(train_local))
-                    
-                    x, labels = x.to(self.device), labels.to(self.device)
-                    optimizer.zero_grad()
-                    log_probs = model(x)
-                    loss = criterion(log_probs, labels)
-                    loss.backward()
-                    optimizer.step()
+                if isinstance(data_t, list):
+                    batch_idx = np.random.choice(len(data_t))
+                    (x, labels) = data_t[batch_idx]
+                elif isinstance(data_t, torch.utils.data.dataloader.DataLoader):
+                    (x, labels) = next(iter(data_t))
+                
+                x, labels = x.to(self.device), labels.to(self.device)
+                optimizer.zero_grad()
+                log_probs = model(x)
+                loss = criterion(log_probs, labels)
+                loss.backward()
+                optimizer.step()
 
             weights = model.cpu().state_dict()
 

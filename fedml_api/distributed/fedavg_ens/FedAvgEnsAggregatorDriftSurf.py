@@ -92,8 +92,9 @@ class FedAvgEnsAggregatorDriftSurf(object):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
                 if self.args.is_mobile == 1:
                     model = transform_list_to_tensor(model)
-                model_list.append((num_sample, model))
-                training_num += num_sample
+                if num_sample > 0:
+                    model_list.append((num_sample, model))
+                    training_num += num_sample
 
             #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
@@ -159,9 +160,9 @@ class FedAvgEnsAggregatorDriftSurf(object):
                 test_num_samples.append(copy.deepcopy(test_num_sample))
                 test_losses.append(copy.deepcopy(test_loss))
                 if self.args.report_client == 1:
-                    wandb.log({"Train/Acc-CL-{}".format(client_idx): train_tot_correct/train_num_sample,
+                    wandb.log({"Train/Acc-CL-{}".format(client_idx): self.reported_acc(train_tot_correct, train_num_sample),
                                "round": round_idx})
-                    wandb.log({"Test/Acc-CL-{}".format(client_idx): test_tot_correct/test_num_sample,
+                    wandb.log({"Test/Acc-CL-{}".format(client_idx): self.reported_acc(test_tot_correct, test_num_sample),
                                "round": round_idx})
 
                 """
@@ -186,6 +187,12 @@ class FedAvgEnsAggregatorDriftSurf(object):
             wandb.log({"Test/Loss": test_loss, "round": round_idx})
             stats = {'test_acc': test_acc, 'test_loss': test_loss}
             logging.info(stats)
+            
+    def reported_acc(self, correct, num_sample):
+        if num_sample == 0:
+            return -1
+        else:
+            return correct/num_sample
 
     def _infer(self, model, test_data):
         model.eval()

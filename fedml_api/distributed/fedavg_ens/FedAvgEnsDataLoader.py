@@ -13,6 +13,7 @@ from scipy.spatial.distance import squareform
 from fedml_api.model.utils import reinitialize
 import random
 import copy
+import torch.utils.data as todata
 
 
 # Loader function for AUE
@@ -169,6 +170,8 @@ class DriftSurfState:
                 correct = predicted.eq(target).sum()
                 test_acc += correct.item()
                 test_total += target.size(0)
+        if test_total == 0:
+            return 0
         return test_acc/test_total
 
     def _append_train_data(self, model_key, iter_id):
@@ -337,6 +340,8 @@ class MultiModelAccState:
                 correct = predicted.eq(target).sum()
                 test_acc += correct.item()
                 test_total += target.size(0)
+        if test_total == 0:
+            return 0
         return test_acc/test_total
 
     def run_model_select(self, new_data_local_dict, device, curr_iter):
@@ -462,7 +467,7 @@ def MultiModelAcc_data_loader(args, loader_func, device, comm, process_id):
         data_batch = loader_func(args)
         [train_data_num, test_data_num, train_data_global, test_data_global,
          train_data_local_num_dict, train_data_local_dict,
-         test_data_local_dict, all_data, class_num, feature_num] = data_batch
+         test_data_local_dict, class_num, feature_num] = data_batch
         mm_state.run_model_select(train_data_local_dict, device,
                                   args.curr_train_iteration)
 
@@ -563,9 +568,10 @@ def ClusterFL_data_loader(args, loader_func, device, comm, process_id):
         datasets.append(loader_func(args))
     
     return datasets
-    
-# returned value is not used by the ExpTrainer, which instead uses all_local_data
-def Exp_data_loader(args, loader_func, device, comm, process_id):
+
+# Note: this data loader is currently created for Lin and Exp 
+# for which the Trainers ignore these data and instead use all_local_data
+def SingleModel_data_loader(args, loader_func, device, comm, process_id):
     args.retrain_data = 'win-1'
     return [loader_func(args)]
     
@@ -835,26 +841,34 @@ class SoftClusterState:
         if len(models_in_use) > 1:
             # identify global data for each model
             cluster_data = {}
-            for m in models_in_use:
-                cluster_data[m] = []
-                for c in range(self.client_num):
-                    for t in range(curr_iter+1):
-                        if self.train_data_weights[t][m][c] == 1:
-                            cluster_data[m] += all_data[c][t]
-                            
-            # subsample
-            for m in models_in_use:
-                globald = cluster_data[m]
-                subsample_size = min(20, len(globald))
-                cluster_data[m] = random.sample(globald, k=subsample_size)
-                         
+            # case: data is list of batches
+            if all( isinstance(all_data[c][0], list) for c in range(self.client_num) ):
+                for m in models_in_use:
+                    cluster_data[m] = []
+                    for c in range(self.client_num):
+                        for t in range(curr_iter+1):
+                            if self.train_data_weights[t][m][c] == 1:
+                                cluster_data[m] += all_data[c][t]
+                    random.shuffle(cluster_data[m])
+            # case: data is torch dataloader
+            else:
+                for m in models_in_use:
+                    m_datasets = []
+                    for c in range(self.client_num):
+                        for t in range(curr_iter+1):
+                            if self.train_data_weights[t][m][c] == 1:
+                                if len(all_data[c][t]) > 0:
+                                    m_datasets.append(all_data[c][t].dataset)
+                    cluster_data[m] = todata.DataLoader(todata.ConcatDataset(m_datasets),
+                                                        batch_size=50, shuffle=True)
+                                         
             # compute cluster accuracy matrix
             cluster_acc = np.zeros((len(models_in_use),len(models_in_use)))
             for i in range(len(models_in_use)):
                 model = models[models_in_use[i]]
                 for j in range(len(models_in_use)):
                     data = cluster_data[models_in_use[j]]
-                    num_correct, num_sample, _ = self._infer(model, data, device)
+                    num_correct, num_sample, _ = self._infer_subset(model, data, device, 20)
                     if num_sample != 0:
                         cluster_acc[i][j] = num_correct/num_sample
 
@@ -1033,6 +1047,33 @@ class SoftClusterState:
 
         return test_acc, test_total, test_loss
 
+    # subset_size indicates max number of batches from test_data to evaluate
+    def _infer_subset(self, model, test_data, device, subset_size):
+        batch_count = 0
+        
+        model.eval()
+        model.to(device)
+
+        test_loss = test_acc = test_total = 0.
+        criterion = nn.CrossEntropyLoss().to(device)
+        with torch.no_grad():
+            for batch_idx, (x, target) in enumerate(test_data):
+                x = x.to(device)
+                target = target.to(device)
+                pred = model(x)
+                loss = criterion(pred, target)
+                _, predicted = torch.max(pred, -1)
+                correct = predicted.eq(target).sum()
+
+                test_acc += correct.item()
+                test_loss += loss.item() * target.size(0)
+                test_total += target.size(0)
+                
+                batch_count += 1
+                if batch_count > subset_size:
+                    break
+
+        return test_acc, test_total, test_loss
 
     # replicate mmgeni
     def cluster_geni(self, curr_iter):

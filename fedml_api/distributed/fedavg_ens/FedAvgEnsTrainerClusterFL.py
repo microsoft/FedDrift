@@ -64,19 +64,27 @@ class FedAvgEnsTrainerClusterFL(object):
             criterion = self.criterions[mod_idx]
             optimizer = self.optimizers[mod_idx]
 
-            batch_loss = []
-            for step in range(self.args.epochs):
-                batch_idx = np.random.choice(len(train_local))
-                (x, labels) = train_local[batch_idx]
-                x, labels = x.to(self.device), labels.to(self.device)
-                optimizer.zero_grad()
-                log_probs = model(x)
-                loss = criterion(log_probs, labels)
-                loss.backward()
-                optimizer.step()
-                batch_loss.append(loss.item())
-                # logging.info('(client {}, Model {}. Local Training Step: {} \tLoss: {:.6f}'.format(
-                    # self.client_index, mod_idx, step, sum(batch_loss) / len(batch_loss)))
+            if isinstance(train_local, list):
+                for step in range(self.args.epochs):
+                    batch_idx = np.random.choice(len(train_local))
+                    (x, labels) = train_local[batch_idx]
+                    
+                    x, labels = x.to(self.device), labels.to(self.device)
+                    optimizer.zero_grad()
+                    log_probs = model(x)
+                    loss = criterion(log_probs, labels)
+                    loss.backward()
+                    optimizer.step()
+            elif isinstance(train_local, torch.utils.data.dataloader.DataLoader):
+                for step in range(self.args.epochs):
+                    (x, labels) = next(iter(train_local))
+                    
+                    x, labels = x.to(self.device), labels.to(self.device)
+                    optimizer.zero_grad()
+                    log_probs = model(x)
+                    loss = criterion(log_probs, labels)
+                    loss.backward()
+                    optimizer.step()
 
             weights = model.cpu().state_dict()
 
