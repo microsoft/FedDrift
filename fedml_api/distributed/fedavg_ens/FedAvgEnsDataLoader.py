@@ -970,10 +970,10 @@ class SoftClusterState:
                 return -1
             
             self.set_weights_zero_model(next_free_model)
-            if len(models) != 0:
-                # option for initializing with previous parameters
-                # models[next_free_model].load_state_dict(models[original_model].state_dict())
-                reinitialize(models[next_free_model])
+        if len(models) != 0:
+            # option for initializing with previous parameters
+            models[next_free_model].load_state_dict(models[original_model].state_dict())
+            # reinitialize(models[next_free_model])
             
         return next_free_model
     
