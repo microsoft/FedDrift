@@ -105,8 +105,9 @@ class FedAvgEnsAggregatorKue(object):
                 model, num_sample = self.weights_and_num_samples_dict[idx][m_idx]
                 if self.args.is_mobile == 1 and num_sample > 0:
                     model = transform_list_to_tensor(model)
-                model_list.append((num_sample, model))
-                training_num += num_sample
+                if num_sample > 0:
+                    model_list.append((num_sample, model))
+                    training_num += num_sample
 
             #logging.info("len of self.model_dict[idx] = " + str(len(self.model_dict)))
 
@@ -233,7 +234,6 @@ class FedAvgEnsAggregatorKue(object):
             model.eval()
             model.to(self.device)
         softmax = nn.Softmax(dim=1).to(self.device)
-        
         test_acc = test_total = 0.
         with torch.no_grad():
             for batch_idx, (x, target) in enumerate(test_data):
@@ -262,6 +262,15 @@ class FedAvgEnsAggregatorKue(object):
         matrix = np.zeros((self.class_num, self.class_num))
         model.eval()
         model.to(self.device)
+        
+        if len(data) == 0:
+            return matrix
+        
+        # mask_np is 1-dim and may need to be reshaped to apply to data
+        (x_archetype, _) = next(iter(data))
+        x_shape = tuple(x_archetype.shape[1:])
+        mask_np = mask_np.reshape(x_shape)
+        
         mask = torch.from_numpy(mask_np)
         mask.to(self.device)
         criterion = nn.CrossEntropyLoss().to(self.device)
@@ -281,6 +290,6 @@ class FedAvgEnsAggregatorKue(object):
                     y = target_np[i]
                     y_hat = predicted_np[i]
                     matrix[y,y_hat] += 1
-                    
+
         return matrix
         

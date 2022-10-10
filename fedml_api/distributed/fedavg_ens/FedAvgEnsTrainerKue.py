@@ -63,6 +63,12 @@ class FedAvgEnsTrainerKue(object):
             optimizer = self.optimizers[mod_idx]
             
             mask_np = self.extra_info['masks'][mod_idx]
+            
+            # mask_np is 1-dim and may need to be reshaped to apply to data
+            (x_archetype, _) = next(iter(train_local))
+            x_shape = tuple(x_archetype.shape[1:])
+            mask_np = mask_np.reshape(x_shape)
+            
             mask = torch.from_numpy(mask_np)
             mask.to(self.device)
 
@@ -96,5 +102,5 @@ class FedAvgEnsTrainerKue(object):
             if self.args.is_mobile == 1:
                 weights = transform_tensor_to_list(weights)
             results[mod_idx] = (weights, local_sample_number)
-            
+
         return results
