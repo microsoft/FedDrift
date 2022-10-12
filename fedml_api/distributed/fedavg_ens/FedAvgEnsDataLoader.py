@@ -1115,7 +1115,9 @@ class SoftClusterState:
             
             weight_updates = []
             for c in clients:
-                local_model, _ = weights_dict[c][model_idx]
+                local_model, local_samples = weights_dict[c][model_idx]
+                if local_samples == 0:
+                    continue
                 diff = dict()
                 for k in old_model.keys():
                     diff[k] = local_model[k] - old_model[k]
