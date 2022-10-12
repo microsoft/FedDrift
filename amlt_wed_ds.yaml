@@ -1,0 +1,130 @@
+description: FMoW experiments for DriftSurf
+
+target:
+  service: sing
+  # run "amlt target list sing" to list the names of available AMLK8s targets
+  name: msroctovc
+
+# image must contain mpi and proper toolkit
+# the following image runs the example pytorch_mnist
+environment:
+  image: amlt-sing/pytorch
+  setup:
+  - pip install wilds
+  - pip install wandb
+  - pip install mpi4py
+  - pip install paho-mqtt
+
+data:
+    local_dir: ./data/fmow/data
+    remote_dir: projects/cont_fedml/data
+
+# storage:
+#   output:
+#     storage_account_name: mnrmlsys
+#     container_name: amulet
+#     mount_dir: /mnt/t-chenningli
+
+# TODO: rsimpai storage.  Requires a different task name
+# storage:
+#   models:
+#     storage_account_name: mnrmlsys
+#     container_name: amulet
+#     mount_dir: /mnt/models
+
+#   data:
+#     storage_account_name: mnrmlsys
+#     container_name: amulet
+#     mount_dir: /mnt/data
+
+
+code:
+  # download the code for the example first:
+  # python ./src/download_horovod_examples.py --example pytorch_mnist
+  # remember to update the code using PT_OUTPUT_DIR to retrieve results using "pt results"
+  # upload the code
+  local_dir: .
+
+jobs:
+- name: ds2_d
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 9 6 0 0 driftsurf 02 1 0 D
+  
+- name: ds2_e
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 5 6 0 0 driftsurf 02 1 0 E
+  
+- name: ds2_f
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 7 6 0 0 driftsurf 02 1 0 F
+
+- name: ds4_d
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 9 6 0 0 driftsurf 04 1 0 D
+  
+- name: ds4_e
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 5 6 0 0 driftsurf 04 1 0 E
+  
+- name: ds4_f
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 7 6 0 0 driftsurf 04 1 0 F
+  
+- name: ds6_d
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 9 6 0 0 driftsurf 06 1 0 D
+  
+- name: ds6_e
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 5 6 0 0 driftsurf 06 1 0 E
+  
+- name: ds6_f
+  sku: G4-V100
+  command:
+  - cd fedml_experiments/distributed/fedavg_cont_ens
+  - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
+  - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
+  - ~/.local/bin/wandb online
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 7 6 0 0 driftsurf 06 1 0 F
+ 
+

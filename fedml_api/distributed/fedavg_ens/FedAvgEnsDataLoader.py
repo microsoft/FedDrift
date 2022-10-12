@@ -612,6 +612,17 @@ class SoftClusterState:
     # Every client contributes to the first model
     def cluster_init(self):
         self.train_data_weights[0] = np.zeros((self.model_num, self.client_num))
+        
+        if self.h_cluster == 'F':
+            for c in range(self.client_num):
+                self.train_data_weights[0][c][c] = 1.
+            for c in range(self.client_num):
+                wandb.log({"Plurality/CL-{}".format(c): c, "round": 0})
+                wandb.run.summary["Contribute/CL-{}".format(c)] = 1
+            wandb.run.summary["num_models"] = self.client_num   
+            wandb.run.summary["local_models"] = self.client_num
+            return
+        
         for c in range(self.client_num):
             self.train_data_weights[0][0][c] = 1.
             
@@ -886,7 +897,7 @@ class SoftClusterState:
                                                     0)
             
             # hierarchically cluster until delta'
-            if self.h_cluster == 'C' or self.h_cluster == 'E':
+            if self.h_cluster == 'C' or self.h_cluster == 'E' or self.h_cluster == 'F':
                 Z = sch.linkage(squareform(distance_matrix), method='complete')
             elif self.h_cluster == 'D':
                 Z = sch.linkage(squareform(distance_matrix), method='average')
