@@ -56,7 +56,7 @@ def load_partition_data_fmow(batch_size, current_train_iteration, num_client,
 def create_dataloader(dataset, batch_size):
     if len(dataset) == 0:
         return []
-    return todata.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    return todata.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=16, persistent_workers=True)
     
 
 class FmowDataset(todata.Dataset):
