@@ -14,6 +14,10 @@ environment:
   - pip install wandb
   - pip install mpi4py
   - pip install paho-mqtt
+  - wget -O azcopy_v10.tar.gz https://aka.ms/downloadazcopy-v10-linux && tar -xf azcopy_v10.tar.gz --strip-components=1
+  - mkdir -p ./data/fmow/data/
+  - ./azcopy cp '$FMOW_TAR_PATH' ./data/fmow/data/
+  - cd ./data/fmow/data/; tar xf fmow_v1.1.tar; cd ../../../
 
 data:
     local_dir: ./data/fmow/data
@@ -53,7 +57,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 9 0 0 all 1 0 D
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 9 0 0 all 1 0 D
   
 - name: one_model_e
   sku: G4-V100
@@ -62,7 +66,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 5 0 0 all 1 0 E
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 5 0 0 all 1 0 E
   
 - name: one_model_f
   sku: G4-V100
@@ -71,7 +75,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 7 0 0 all 1 0 F
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 7 0 0 all 1 0 F
   
 - name: fd_d
   sku: G4-V100
@@ -80,7 +84,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 9 6 0 0 softcluster H_A_C_1_06_0 1 0 D
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 9 6 0 0 softcluster H_A_C_1_06_0 1 0 D
   
 - name: fd_e
   sku: G4-V100
@@ -89,7 +93,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 5 6 0 0 softcluster H_A_C_1_06_0 1 0 E
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 5 6 0 0 softcluster H_A_C_1_06_0 1 0 E
   
 - name: fd_f
   sku: G4-V100
@@ -98,7 +102,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 7 6 0 0 softcluster H_A_C_1_06_0 1 0 F
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 7 6 0 0 softcluster H_A_C_1_06_0 1 0 F
   
 - name: fdf_d
   sku: G4-V100
@@ -107,7 +111,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 9 10 0 0 softcluster H_A_F_1_06_0 1 0 D
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 50 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 9 10 0 0 softcluster H_A_F_1_06_0 1 0 D
   
 - name: fdf_e
   sku: G4-V100
@@ -116,7 +120,7 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 5 10 0 0 softcluster H_A_F_1_06_0 1 0 E
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 200 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 5 10 0 0 softcluster H_A_F_1_06_0 1 0 E
   
 - name: fdf_f
   sku: G4-V100
@@ -125,5 +129,5 @@ jobs:
   - ~/.local/bin/wandb login 215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee
   - export WANDB_API_KEY="215d78ccc4bfa4a30fcb4bc08ba10884e6e42fee"
   - ~/.local/bin/wandb online
-  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow $$AMLT_DATA_DIR 100 0 0 7 10 0 0 softcluster H_A_F_1_06_0 1 0 F
+  - bash run_fedavg_distributed_pytorch.sh 5 5 1 4 resnet homo 10 100 64 0.0001 fmow ../../../data/fmow/data/ 100 0 0 7 10 0 0 softcluster H_A_F_1_06_0 1 0 F
 
