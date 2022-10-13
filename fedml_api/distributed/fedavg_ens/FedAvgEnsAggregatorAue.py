@@ -70,7 +70,8 @@ class FedAvgEnsAggregatorAue(object):
                     model, self.train_data_local_dicts[0][client_idx])
                 msei += mse
                 total_sample += sample
-            msei = msei/total_sample
+            if total_sample != 0:
+                msei = msei/total_sample
             self.ens_weights[m_idx] = 1./(mser + msei + \
                                           FedAvgEnsAggregatorAue.EPS)
 
