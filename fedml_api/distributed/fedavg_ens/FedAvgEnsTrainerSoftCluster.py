@@ -25,8 +25,7 @@ class FedAvgEnsTrainerSoftCluster(object):
         self.criterions = []
         for m in self.models:
             # self._freeze_layers(m)
-            
-            m.to(self.device)
+            #m.to(self.device)  #Move model to GPU one at a time to save GPU memory
             self.criterions.append(nn.CrossEntropyLoss().to(self.device))
             if self.args.client_optimizer == "sgd":
                 self.optimizers.append(torch.optim.SGD(m.parameters(), lr=self.args.lr))
@@ -125,7 +124,8 @@ class FedAvgEnsTrainerSoftCluster(object):
                     loss.backward()
                     optimizer.step()
 
-            weights = model.cpu().state_dict()
+            model.to(torch.device('cpu'))
+            weights = model.state_dict()
 
             # transform Tensor to list
             if self.args.is_mobile == 1:

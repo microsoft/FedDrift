@@ -253,6 +253,8 @@ class FedAvgEnsAggregatorAuePc(object):
                 test_loss += loss.item() * target.size(0)
                 test_total += target.size(0)
 
+        self.models[0].to(torch.device('cpu'))
+
         return test_acc, test_total, test_loss
 
     def _infer_ens(self, test_data, ens_weights):
@@ -278,5 +280,8 @@ class FedAvgEnsAggregatorAuePc(object):
                 correct = (overall_pred == target_np).sum()
                 test_acc += correct
                 test_total += target.size(0)
+        
+        for model in self.models:
+            model.to(torch.device('cpu'))
 
         return test_acc, test_total

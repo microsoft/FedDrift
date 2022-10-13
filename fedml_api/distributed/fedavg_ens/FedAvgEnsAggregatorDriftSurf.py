@@ -213,4 +213,6 @@ class FedAvgEnsAggregatorDriftSurf(object):
                 test_loss += loss.item() * target.size(0)
                 test_total += target.size(0)
 
+        model.to(torch.device('cpu'))
+
         return test_acc, test_total, test_loss
