@@ -21,7 +21,8 @@ def load_partition_data_fmow(batch_size, current_train_iteration, num_client,
     test_data_local_dict = dict()
     train_data_local_num_dict = dict()
     # the global data are left uninitialized. in current implementation, no one uses these
-    train_data_global = None
+    win1_global_dataset = todata.ConcatDataset([ FmowDataset(c, current_train_iteration, data_dir, partition_name) for c in range(num_client) ])
+    train_data_global = create_dataloader(win1_global_dataset, batch_size)
     test_data_global = None
 
     for c in range(num_client):
