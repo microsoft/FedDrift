@@ -227,6 +227,8 @@ class FedAvgEnsAggregatorKue(object):
                 test_loss += loss.item() * target.size(0)
                 test_total += target.size(0)
 
+        self.models[0].to(torch.device('cpu'))
+
         return test_acc, test_total, test_loss
 
     def _infer_ens(self, test_data):
@@ -255,16 +257,20 @@ class FedAvgEnsAggregatorKue(object):
                 correct = (overall_pred == target_np).sum()
                 test_acc += correct
                 test_total += target.size(0)  
-      
+        
+        for model in self.models:
+            model.to(torch.device('cpu'))
+
         return test_acc, test_total
     
     def _confusion_matrix(self, model, data, mask_np):
-        matrix = np.zeros((self.class_num, self.class_num))
-        model.eval()
-        model.to(self.device)
-        
+        matrix = np.zeros((self.class_num, self.class_num))        
+
         if len(data) == 0:
             return matrix
+
+        model.eval()
+        model.to(self.device)
         
         # mask_np is 1-dim and may need to be reshaped to apply to data
         (x_archetype, _) = next(iter(data))
@@ -290,6 +296,8 @@ class FedAvgEnsAggregatorKue(object):
                     y = target_np[i]
                     y_hat = predicted_np[i]
                     matrix[y,y_hat] += 1
+
+        model.to(torch.device('cpu'))
 
         return matrix
         
