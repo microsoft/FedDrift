@@ -827,6 +827,10 @@ class SoftClusterState:
             
             self.set_acc(c, newest_acc)
             
+        # log clustering
+        for c in range(self.client_num):
+            wandb.log({"Plurality/CL-{}".format(c): self.get_test_model_idx(curr_iter, c), "round": 0})
+            
         self.log_models(curr_iter)
         
             
