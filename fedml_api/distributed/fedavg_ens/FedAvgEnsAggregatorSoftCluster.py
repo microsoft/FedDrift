@@ -321,6 +321,8 @@ class FedAvgEnsAggregatorSoftCluster(object):
                 test_loss += loss.item() * target.size(0)
                 test_total += target.size(0)
 
+        model.to(torch.device('cpu'))
+
         return test_acc, test_total, test_loss
      
     # accuracy of model on only the test_data with the class_label
@@ -344,6 +346,8 @@ class FedAvgEnsAggregatorSoftCluster(object):
                 
                 test_acc += correct_pred_class.sum().item()
                 test_total += index_class.sum().item()
+
+        model.to(torch.device('cpu'))
         
         if test_total == 0:
             return -1

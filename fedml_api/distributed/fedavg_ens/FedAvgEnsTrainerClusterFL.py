@@ -23,7 +23,7 @@ class FedAvgEnsTrainerClusterFL(object):
         self.optimizers = []
         self.criterions = []
         for m in self.models:
-            m.to(self.device)
+            #m.to(self.device)
             self.criterions.append(nn.CrossEntropyLoss().to(self.device))
             if self.args.client_optimizer == "sgd":
                 self.optimizers.append(torch.optim.SGD(m.parameters(), lr=self.args.lr))
@@ -86,7 +86,8 @@ class FedAvgEnsTrainerClusterFL(object):
                     loss.backward()
                     optimizer.step()
 
-            weights = model.cpu().state_dict()
+            model.to(torch.device('cpu'))
+            weights = model.state_dict()
 
             # transform Tensor to list
             if self.args.is_mobile == 1:
