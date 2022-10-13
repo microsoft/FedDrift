@@ -790,6 +790,46 @@ class SoftClusterState:
             self.train_data_weights[curr_iter][0] = probs[1]
             self.train_data_weights[curr_iter][1] = probs[0]
             
+    def cluster_mmacc2(self, curr_iter, models, all_data, device):
+        acc_matrix = self.train_acc_matrix(curr_iter, models, all_data, device, list(range(self.model_num)))
+        
+        # clustering occurs only among models already initialized and not reset
+        models_in_use = []
+        for m in range(self.model_num):
+            if any( any( self.train_data_weights[t][m] > 0 ) for t in range(curr_iter) ):
+                models_in_use.append(m)
+                
+        # initialize weight matrix
+        self.train_data_weights[curr_iter] = np.zeros((self.model_num, self.client_num))
+        
+        # first identify with best model among models_in_use 
+        for c in range(self.client_num):
+            best_model_idx = np.argmax(acc_matrix[models_in_use,c])
+            best_model = models_in_use[best_model_idx]
+            self.train_data_weights[curr_iter][best_model][c] = 1.
+        
+        next_free_model = -42   # special initial value until some client detects a drift
+        
+        # switch to a new model if acc degrades
+        for c in range(self.client_num):
+            best_model_idx = np.argmax(acc_matrix[models_in_use,c])
+            best_model = models_in_use[best_model_idx]
+            
+            newest_acc = acc_matrix[best_model][c]
+            
+            if self.mmacc_acc_dict[c] - acc_matrix[best_model][c] > self.mmacc_delta:
+                if next_free_model == -42:
+                    next_free_model = self.find_unused_model_lru(curr_iter, models, best_model)             
+                if next_free_model != -1:
+                    for mmm in range(self.model_num):
+                        self.train_data_weights[curr_iter][mmm][c] = 0
+                    self.train_data_weights[curr_iter][next_free_model][c] = 1.
+            
+            self.set_acc(c, newest_acc)
+            
+        self.log_models(curr_iter)
+        
+            
     def cluster_hierarchical(self, curr_iter, models, all_data, device):
         # FedDrift-C: delete all but one model created
         if self.h_cluster == 'E':
@@ -871,7 +911,7 @@ class SoftClusterState:
                                 if len(all_data[c][t]) > 0:
                                     m_datasets.append(all_data[c][t].dataset)
                     cluster_data[m] = todata.DataLoader(todata.ConcatDataset(m_datasets),
-                                                        batch_size=50, shuffle=True)
+                                                        batch_size=32, shuffle=True)
                                          
             # compute cluster accuracy matrix
             cluster_acc = np.zeros((len(models_in_use),len(models_in_use)))

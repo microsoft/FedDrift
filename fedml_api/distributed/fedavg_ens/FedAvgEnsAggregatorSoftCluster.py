@@ -61,9 +61,22 @@ class FedAvgEnsAggregatorSoftCluster(object):
                 sc_state.cluster_init()
             else:
                 sc_state.cluster_cfl_init(self.args.curr_train_iteration)
+        elif 'hard' in self.args.concept_drift_algo_arg:
+            if self.args.curr_train_iteration == 0:
+                for model in self.models:
+                    for layer in model.children():
+                        if hasattr(layer, 'reset_parameters'):
+                            layer.reset_parameters()
+            curr_acc = self.train_acc_matrix()
+            sc_state.cluster(curr_acc, self.args.curr_train_iteration, 0)
+        elif 'mmacc' in self.args.concept_drift_algo_arg:
+            if self.args.curr_train_iteration == 0:
+                sc_state.cluster_init()
+            else:
+                sc_state.cluster_mmacc2(self.args.curr_train_iteration, self.models, self.all_data, self.device)
         else:
             # hardcoded type D, which has multiple concepts at time 0
-            if self.args.curr_train_iteration == 0 and self.args.change_points != 'D':
+            if self.args.curr_train_iteration == 0:
                 sc_state.cluster_init()
             else:          
                 curr_acc = self.train_acc_matrix()
