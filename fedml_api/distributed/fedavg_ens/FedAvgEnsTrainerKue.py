@@ -48,15 +48,15 @@ class FedAvgEnsTrainerKue(object):
         results = {}
 
         for mod_idx, model in enumerate(self.models):
-            model.to(self.device)
-            # change to train mode
-            model.train()
-
             local_sample_number = self.train_data_local_num_dicts[mod_idx][self.client_index]
             # Skip the training if there is no training data for this model
             if local_sample_number == 0:
                 results[mod_idx] = (None, 0)
                 continue
+
+            model.to(self.device)
+            # change to train mode
+            model.train()
 
             train_local = self.train_data_local_dicts[mod_idx][self.client_index]
             criterion = self.criterions[mod_idx]
@@ -70,7 +70,7 @@ class FedAvgEnsTrainerKue(object):
             mask_np = mask_np.reshape(x_shape)
             
             mask = torch.from_numpy(mask_np)
-            mask.to(self.device)
+            mask = mask.to(self.device)
 
             if isinstance(train_local, list):
                 for step in range(self.args.epochs):
@@ -89,6 +89,8 @@ class FedAvgEnsTrainerKue(object):
                     (x, labels) = next(iter(train_local))
                     
                     x, labels = x.to(self.device), labels.to(self.device)
+                    print(x.device)
+                    print(mask.device)
                     x = torch.mul(x, mask)
                     optimizer.zero_grad()
                     log_probs = model(x)
