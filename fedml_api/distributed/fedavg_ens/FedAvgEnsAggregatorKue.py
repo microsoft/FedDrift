@@ -278,7 +278,7 @@ class FedAvgEnsAggregatorKue(object):
         mask_np = mask_np.reshape(x_shape)
         
         mask = torch.from_numpy(mask_np)
-        mask.to(self.device)
+        mask = mask.to(self.device)
         criterion = nn.CrossEntropyLoss().to(self.device)
         with torch.no_grad():
             for batch_idx, (x, target) in enumerate(data):
