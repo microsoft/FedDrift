@@ -89,8 +89,6 @@ class FedAvgEnsTrainerKue(object):
                     (x, labels) = next(iter(train_local))
                     
                     x, labels = x.to(self.device), labels.to(self.device)
-                    print(x.device)
-                    print(mask.device)
                     x = torch.mul(x, mask)
                     optimizer.zero_grad()
                     log_probs = model(x)
