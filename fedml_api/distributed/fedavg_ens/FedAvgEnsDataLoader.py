@@ -170,6 +170,8 @@ class DriftSurfState:
                 correct = predicted.eq(target).sum()
                 test_acc += correct.item()
                 test_total += target.size(0)
+
+        self.models[model_key].to(torch.device('cpu'))
         if test_total == 0:
             return 0
         return test_acc/test_total
@@ -340,6 +342,7 @@ class MultiModelAccState:
                 correct = predicted.eq(target).sum()
                 test_acc += correct.item()
                 test_total += target.size(0)
+        self.models[model_key].to(torch.device('cpu'))
         if test_total == 0:
             return 0
         return test_acc/test_total
@@ -1100,6 +1103,8 @@ class SoftClusterState:
                 test_loss += loss.item() * target.size(0)
                 test_total += target.size(0)
 
+        model.to(torch.device('cpu'))
+
         return test_acc, test_total, test_loss
 
     # subset_size indicates max number of batches from test_data to evaluate
@@ -1127,6 +1132,8 @@ class SoftClusterState:
                 batch_count += 1
                 if batch_count > subset_size:
                     break
+
+        model.to(torch.device('cpu'))
 
         return test_acc, test_total, test_loss
 
