@@ -34,7 +34,7 @@ from fedml_api.model.cv.cnn import CNN_DropOut
 
 import torchvision
 
-from fedml_api.model.utils import reinitialize
+from fedml_api.model import utils
 
 from fedml_api.distributed.fedavg_ens.FedAvgEnsAPI import FedML_init, FedML_FedAvgEns_distributed, FedML_FedAvgEns_data_loader
 
@@ -133,7 +133,7 @@ def add_args(parser):
                         help='label of a sample is swapped with this probability')
                         
     parser.add_argument('--dummy_arg', type=int, default=0,
-                        help='this does nothing')
+                        help='parameter to distinguish different trials. may be used for random seeds')
 
     args = parser.parse_args()
     return args
@@ -220,7 +220,7 @@ def create_model(args, model_name, output_dim, feature_dim):
         model = torchvision.models.densenet121(pretrained=True)
     if model_name == "resnet":
         model = torchvision.models.resnet18(pretrained=True)
-    reinitialize(model)
+    utils.reinitialize(model)
     return model
 
 def init_training_device(process_ID, fl_worker_num, gpu_num_per_machine):
@@ -291,10 +291,11 @@ if __name__ == "__main__":
 
     # Set the random seed. The np.random seed determines the dataset partition.
     # The torch_manual_seed determines the initial weight.
-    # We fix these two, so that we can reproduce the result.
-    #np.random.seed(0)
-    #torch.manual_seed(10)
-    #random.seed(0)
+    # Fixed so that we can reproduce the result.
+    np.random.seed(args.dummy_arg)
+    torch.manual_seed(args.dummy_arg)
+    random.seed(args.dummy_arg)
+    utils.torch_seed = args.dummy_arg
 
     # GPU arrangement: Please customize this function according your own topology.
     # The GPU server list is configured at "mpi_host_file".
