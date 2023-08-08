@@ -1,8 +1,22 @@
-# Federated Learning in Non-Staionary Environment
+# Federated Learning under Distributed Concept Drift (FedDrift)
 
-Federated learning is a promising machine learning paradigm that enables collaborative learning while preserving data privacy. Prior work has been focused on efficient and robust federated learning algorithm based on a fixed amount of training data. However, real-world data is generated continuously and training data can drift over time. Using obsolete training data will generate ML models that perform poorly on future data. This problem is particularly challenging for federated learning as different clients may have different concepts at different time, and there may not be a one-size-fit-all ML model that works for all clients. In this project, we aim to understand the problem of federated learning under concept drift over time. Our goals are (1) making further theoretical understanding of this problem; and (2) designing effective algorithms to address this challenge.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+This repository is the source code for our paper: [Federated Learning under Distributed Concept Drift (AISTATS'23)](https://proceedings.mlr.press/v206/jothimurugesan23a/jothimurugesan23a.pdf).
+
+Federated Learning (FL) under distributed concept drift is a largely unexplored area. Although concept drift is itself a well-studied phenomenon, it poses particular challenges for FL, because drifts arise staggered in time and space (across clients).
+We first demonstrate that prior solutions to drift adaptation that use a single global model are ill-suited to staggered drifts, necessitating multiple-model solutions. 
+We identify the problem of drift adaptation as a time-varying clustering problem, and we propose two new clustering algorithms for reacting to drifts based on local drift detection and hierarchical clustering.
+Empirical evaluation shows that our solutions achieve significantly higher accuracy than existing baselines, and are comparable to an idealized algorithm with oracle knowledge of the ground-truth clustering of clients to concepts at each time step.
 
 This repository is built on top of a federated learning research platform, [FedML](https://github.com/FedML-AI/FedML). 
+
+# Reference Papers
+
+If you use our code in your work, we would appreciate a reference to the following papers
+
+Ellango Jothimurugesan, Kevin Hsieh, Jianyu Wang, Gauri Joshi, Phillip B. Gibbons. [Federated Learning under Distributed Concept Drift](https://proceedings.mlr.press/v206/jothimurugesan23a/jothimurugesan23a.pdf). Proceedings of The 26th International Conference on Artificial Intelligence and Statistics (AISTATS), 2023.
+
 
 # Contributing
 
