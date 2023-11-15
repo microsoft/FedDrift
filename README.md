@@ -53,13 +53,16 @@ The major algorithms we implemented are listed here (in the form of `${DRIFT_ALG
 * `win-1`: Window method (one time step)
 * `win-2`: Window method (two time step)
 * `all`: Oblivous method (using all training data)
+* `lin`: Weighted (linear decay)
+* `exp`: Weighted (exponential decay)
 * `dsurf`: [DriftSurf](https://proceedings.mlr.press/v139/tahmasbi21a/tahmasbi21a.pdf)
 * `aue`: [Accuracy Updated Ensemble](https://link.springer.com/chapter/10.1007/978-3-642-21222-2_19)
 * `kue`: [Kappa Updated Ensemble](https://link.springer.com/article/10.1007/s10994-019-05840-z)
 * `softcluster` + `cfl_0.1_win-1`: Clustered federated learning
 * `softclusterwin-1` + `hard-r`: [IFCA](https://arxiv.org/abs/2006.04088)
-* `ada` + `win-1_iter` [Adaptive-FedAvg](https://ieeexplore.ieee.org/document/9533710)
-
+* `ada` + `win-1_iter`: [Adaptive-FedAvg](https://ieeexplore.ieee.org/document/9533710)
+* `softcluster` + `H_A_F_1_06_0`: FedDrift (ours)
+* `softcluster` + `mmacc_06`: FedDrift-Eagar (ours)
 
 # Reference Papers
 
